@@ -1,0 +1,5 @@
+<dependency>
+  <groupId>org.jgroups</groupId>
+  <artifactId>jgroups</artifactId>
+  <version>5.0.0.Final</version>
+</dependency>
