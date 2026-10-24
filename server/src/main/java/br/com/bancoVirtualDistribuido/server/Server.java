@@ -1,3 +1,5 @@
+package br.com.bancoVirtualDistribuido.server;
+
 import org.jgroups.JChannel;
 import org.jgroups.Message;
 import org.jgroups.Receiver;
@@ -10,7 +12,7 @@ public class Server {
   public static void main(String[] args) throws Exception {
     String nome = args.length > 0 ? args[0] : "Servidor";
 
-    try (JChannel channel = new JChannel("../../resources/config.xml")) {
+    try (JChannel channel = new JChannel("/config.xml")) {
 
       channel.setName(nome);
 
