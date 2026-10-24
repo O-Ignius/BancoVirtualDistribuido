@@ -53,7 +53,7 @@ public class AccountStorage {
     ArrayNode accounts = (ArrayNode) data.get("accounts");
 
     for (JsonNode account : accounts) {
-      if (account.path("cpf").asText().equals(cpf)) {
+      if (account.path("cpf").asText().equals(cpf) && account.path("isDeleted").asBoolean() == false) {
         return account;
       }
     }
@@ -69,39 +69,63 @@ public class AccountStorage {
     return account.path("balance").asDouble();
   }
 
+  // tenta logar com as credenciais
+  public boolean loginAccount(String id, String password) {
+    ArrayNode accounts = (ArrayNode) data.get("accounts");
+
+    for (JsonNode account : accounts) {
+      if (account.path("cpf").asText().equals(id) || account.path("user").equals(id)) {
+        if (account.path("password").equals(password)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   // cria conta
   public void createAccount(
       String cpf,
-      String holder,
-      double initialBalance) throws IOException {
+      String user,
+      String password) throws IOException {
+
+    boolean reCreating = false;
 
     if (cpf == null || cpf.isBlank()) {
       throw new IllegalArgumentException("CPF is required.");
     }
 
-    if (holder == null || holder.isBlank()) {
-      throw new IllegalArgumentException("Holder is required.");
+    if (password == null || password.isBlank()) {
+      throw new IllegalArgumentException("password is required.");
     }
 
-    if (initialBalance < 0) {
-      throw new IllegalArgumentException(
-          "Initial balance cannot be negative.");
+    if (user == null || user.isBlank()) {
+      throw new IllegalArgumentException("Username is required.");
     }
 
     ArrayNode accounts = (ArrayNode) data.get("accounts");
 
     for (JsonNode account : accounts) {
       if (account.path("cpf").asText().equals(cpf)) {
-        throw new IllegalArgumentException(
-            "An account with this CPF already exists.");
+        if (account.path("isDeleted").asBoolean() == true) {
+          ((ObjectNode) account).put("isDeleted", false);
+          reCreating = true;
+        } else {
+          throw new IllegalArgumentException(
+              "An account with this CPF already exists.");
+        }
       }
     }
 
     ObjectNode newAccount = mapper.createObjectNode();
+    newAccount.put("user", user);
     newAccount.put("cpf", cpf);
-    newAccount.put("holder", holder);
-    newAccount.put("balance", initialBalance);
-
+    newAccount.put("password", password);
+    // Saldo inicial de 1000 dinheiros
+    if (!reCreating) {
+      newAccount.put("balance", 1000);
+    }
     accounts.add(newAccount);
     save();
   }
@@ -117,6 +141,40 @@ public class AccountStorage {
 
     JsonNode account = searchByCPF(cpf);
     ((ObjectNode) account).put("balance", newBalance);
+
+    save();
+  }
+
+  // altera nome e senha
+  public void modifyAccountData(String cpf, String newUser, String newPassword)
+      throws IOException {
+
+    boolean needSave = false;
+
+    JsonNode account = searchByCPF(cpf);
+    if (newUser != null && !newUser.isBlank()) {
+      ((ObjectNode) account).put("user", newUser);
+      needSave = true;
+    }
+
+    if (newPassword != null && !newPassword.isBlank()) {
+      ((ObjectNode) account).put("password", newPassword);
+      needSave = true;
+    }
+
+    if (needSave) {
+      save();
+    }
+  }
+
+  public void delete(String cpf) throws IOException {
+    JsonNode account = searchByCPF(cpf);
+
+    if (account.path("balance").asDouble() > 0) {
+      throw new IllegalStateException("Ainda há saldo na conta, impossível excluir!");
+    }
+
+    ((ObjectNode) account).put("isDeleted", true);
 
     save();
   }
