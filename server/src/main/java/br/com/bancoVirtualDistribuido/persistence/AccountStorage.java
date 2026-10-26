@@ -124,6 +124,7 @@ public class AccountStorage {
     newAccount.put("password", password);
     // Saldo inicial de 1000 dinheiros
     if (!reCreating) {
+      newAccount.put("isDeleted", false);
       newAccount.put("balance", 1000);
     }
     accounts.add(newAccount);

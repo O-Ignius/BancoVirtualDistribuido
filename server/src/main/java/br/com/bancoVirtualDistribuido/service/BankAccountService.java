@@ -28,6 +28,17 @@ public class BankAccountService {
 
   }
 
+  public BankAccountService(String pathArchive) {
+    try {
+      this.accountStorage = new AccountStorage(pathArchive);
+    } catch (IOException e) {
+      System.out.println(e);
+    }
+  }
+
+  public BankAccountService() {
+  }
+
   public void login(String id, String password) {
     if (accountStorage.loginAccount(id, password)) {
       System.out.println("Login com sucesso!");

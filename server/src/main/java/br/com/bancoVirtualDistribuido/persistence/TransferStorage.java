@@ -11,14 +11,13 @@ import java.nio.file.Path;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
-import java.time.Instant;
 
 public class TransferStorage {
   private final ObjectMapper mapper = new ObjectMapper();
   private final Path archive;
   private ObjectNode data;
 
-  public AccountStorage(String path) throws IOException {
+  public TransferStorage(String path) throws IOException {
     this.archive = Path.of(path);
 
     if (Files.exists(archive)) {
@@ -147,7 +146,8 @@ public class TransferStorage {
   public void createTransfer(
       String source,
       String destiny,
-      double amount) throws IOException {
+      double amount,
+      LocalDateTime timestamp) throws IOException {
 
     if (source == null || source.isBlank()
         || destiny == null || destiny.isBlank()) {
@@ -168,12 +168,22 @@ public class TransferStorage {
     ArrayNode transfers = (ArrayNode) data.get("transfers");
 
     ObjectNode transfer = mapper.createObjectNode();
+    transfer.put("isDeleted", false);
     transfer.put("source", source);
     transfer.put("destiny", destiny);
     transfer.put("amount", amount);
-    transfer.put("timestamp", Instant.now().toString());
+    transfer.put("timestamp", timestamp.toString());
 
     transfers.add(transfer);
+
+    save();
+  }
+
+  // deleta a ultima transação entre fonte e destino
+  public void delete(String source, String destiny) throws IOException {
+    JsonNode transfer = searchCPFToCPF(source, destiny);
+
+    ((ObjectNode) transfer).put("isDeleted", true);
 
     save();
   }
