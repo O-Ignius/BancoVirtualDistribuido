@@ -4,6 +4,9 @@ import java.io.IOException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import br.com.bancoVirtualDistribuido.persistence.AccountStorage;
 import br.com.bancoVirtualDistribuido.model.BankAccount;
 
@@ -52,6 +55,27 @@ public class BankAccountService {
       accountStorage.createAccount(user, cpf, password);
     } catch (IOException e) {
       System.out.println("Erro no salvamento do arquivo de transferencias: " + e.getMessage());
+    }
+  }
+
+  public BankAccount[] readAll() {
+
+    try {
+      JsonNode data = accountStorage.readAll();
+      List<BankAccount> accounts = new ArrayList<>();
+      for (JsonNode item : data) {
+        BankAccount transfer = new BankAccount(
+            item.path("user").asText(),
+            item.path("password").asText(),
+            item.path("balance").asDouble(),
+            item.path("cpf").asText());
+
+        accounts.add(transfer);
+      }
+
+      return accounts.toArray(new BankAccount[0]);
+    } catch (Exception e) {
+      throw new RuntimeException("Erro ao ler contas", e);
     }
   }
 
