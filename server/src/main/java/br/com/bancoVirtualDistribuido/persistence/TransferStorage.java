@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 
+import java.util.UUID;
+
 public class TransferStorage {
   private final ObjectMapper mapper = new ObjectMapper();
   private final Path archive;
@@ -168,6 +170,7 @@ public class TransferStorage {
     ArrayNode transfers = (ArrayNode) data.get("transfers");
 
     ObjectNode transfer = mapper.createObjectNode();
+    transfer.put("uuid", UUID.randomUUID().toString());
     transfer.put("isDeleted", false);
     transfer.put("source", source);
     transfer.put("destiny", destiny);

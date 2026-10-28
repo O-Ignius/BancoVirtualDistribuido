@@ -35,6 +35,14 @@ public class TransferService {
 
   }
 
+  public TransferService(String pathTransferStorage) {
+    try {
+      this.transferStorage = new TransferStorage(pathTransferStorage);
+    } catch (IOException e) {
+      System.out.println(e);
+    }
+  }
+
   public TransferService() {
   }
 
@@ -65,6 +73,28 @@ public class TransferService {
       List<BankTransfer> transfers = new ArrayList<>();
       for (JsonNode item : data) {
         BankTransfer transfer = new BankTransfer(
+            item.path("uuid").asText(),
+            item.path("source").asText(),
+            item.path("destiny").asText(),
+            item.path("amount").asDouble(),
+            LocalDateTime.parse(item.path("timestamp").asText()));
+
+        transfers.add(transfer);
+      }
+
+      return transfers.toArray(new BankTransfer[0]);
+    } catch (Exception e) {
+      throw new RuntimeException("Erro ao ler transferências", e);
+    }
+  }
+
+  public BankTransfer[] readAll() {
+    try {
+      JsonNode data = transferStorage.readAll();
+      List<BankTransfer> transfers = new ArrayList<>();
+      for (JsonNode item : data) {
+        BankTransfer transfer = new BankTransfer(
+            item.path("uuid").asText(),
             item.path("source").asText(),
             item.path("destiny").asText(),
             item.path("amount").asDouble(),
