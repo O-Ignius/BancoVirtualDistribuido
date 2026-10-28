@@ -3,6 +3,7 @@ package br.com.bancoVirtualDistribuido.model;
 import java.time.LocalDateTime;
 
 public class BankTransfer {
+  private String uuid;
   private String source;
   private String destiny;
   private double amount;
@@ -13,8 +14,9 @@ public class BankTransfer {
   }
 
   // Construtor com todos os atributos
-  public BankTransfer(String source, String destiny, double amount,
+  public BankTransfer(String uuid, String source, String destiny, double amount,
       LocalDateTime timestamp) {
+    this.uuid = uuid;
     this.source = source;
     this.destiny = destiny;
     this.amount = amount;
@@ -22,6 +24,10 @@ public class BankTransfer {
   }
 
   // Getters
+  public String getUUId() {
+    return uuid;
+  }
+
   public String getSource() {
     return source;
   }
