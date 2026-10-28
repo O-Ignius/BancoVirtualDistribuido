@@ -72,6 +72,12 @@ public class TransferService {
     try {
       JsonNode data = transferStorage.searchAllSendByCPF(cpf);
       List<BankTransfer> transfers = new ArrayList<>();
+
+      // caso json não exista
+      if (data == null || data.isNull() || data.isEmpty()) {
+        return new BankTransfer[0];
+      }
+
       for (JsonNode item : data) {
         BankTransfer transfer = new BankTransfer(
             item.path("uuid").asText(),
@@ -85,7 +91,7 @@ public class TransferService {
 
       return transfers.toArray(new BankTransfer[0]);
     } catch (Exception e) {
-      throw new RuntimeException("Erro ao ler transferências", e);
+      throw new RuntimeException("Erro ao ler transferências de um dado cpf", e);
     }
   }
 
@@ -93,13 +99,26 @@ public class TransferService {
     try {
       JsonNode data = transferStorage.readAll();
       List<BankTransfer> transfers = new ArrayList<>();
+
+      // caso json não exista
+      if (data == null || data.isNull() || data.isEmpty()) {
+        return new BankTransfer[0];
+      }
+
       for (JsonNode item : data) {
+        String timestamp = item.path("timestamp").asText("");
+
+        if (timestamp.isBlank()) {
+          throw new IllegalArgumentException(
+              "Transferência sem timestamp: " + item.toPrettyString());
+        }
+
         BankTransfer transfer = new BankTransfer(
             item.path("uuid").asText(),
             item.path("source").asText(),
             item.path("destiny").asText(),
             item.path("amount").asDouble(),
-            LocalDateTime.parse(item.path("timestamp").asText()));
+            LocalDateTime.parse(timestamp));
 
         transfers.add(transfer);
       }

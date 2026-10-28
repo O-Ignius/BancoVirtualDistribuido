@@ -64,6 +64,12 @@ public class BankAccountService {
     try {
       JsonNode data = accountStorage.readAll();
       List<BankAccount> accounts = new ArrayList<>();
+
+      // caso json não exista
+      if (data == null || data.isNull() || data.isEmpty()) {
+        return new BankAccount[0];
+      }
+
       for (JsonNode item : data) {
         BankAccount transfer = new BankAccount(
             item.path("user").asText(),
@@ -76,7 +82,7 @@ public class BankAccountService {
 
       return accounts.toArray(new BankAccount[0]);
     } catch (Exception e) {
-      throw new RuntimeException("Erro ao ler contas", e);
+      throw new RuntimeException("Erro ao ler contas" + e);
     }
   }
 
