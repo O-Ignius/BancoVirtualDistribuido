@@ -49,7 +49,7 @@ public class AccountStorage {
   }
 
   public JsonNode readAll() {
-    return data;
+    return data.get("accounts");
   }
 
   // pega conta por cpf
