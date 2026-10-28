@@ -35,4 +35,24 @@ public class BankAccount {
   public boolean getIsDeleted() {
     return isDeleted;
   }
+
+  public void setUser(String user) {
+    this.user = user;
+  }
+
+  public void setPassword(String password) {
+    this.password = password;
+  }
+
+  public void setBalance(double balance) {
+    this.balance = balance;
+  }
+
+  public void setCpf(String cpf) {
+    this.cpf = cpf;
+  }
+
+  public void setIsDeleted(boolean isDeleted) {
+    this.isDeleted = isDeleted;
+  }
 }
