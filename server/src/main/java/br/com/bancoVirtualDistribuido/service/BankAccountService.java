@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collection;
 
 import br.com.bancoVirtualDistribuido.persistence.AccountStorage;
 import br.com.bancoVirtualDistribuido.model.BankAccount;
@@ -68,7 +69,7 @@ public class BankAccountService {
             item.path("user").asText(),
             item.path("password").asText(),
             item.path("balance").asDouble(),
-            item.path("cpf").asText());
+            item.path("cpf").asText(), item.path("isDeleted").asBoolean());
 
         accounts.add(transfer);
       }
@@ -86,7 +87,7 @@ public class BankAccountService {
         account.path("user").asText(),
         account.path("password").asText(),
         account.path("balance").asDouble(),
-        account.path("cpf").asText());
+        account.path("cpf").asText(), account.path("isDeleted").asBoolean());
   }
 
   public void updateAccount(String user, String cpf, String password) {
@@ -113,4 +114,11 @@ public class BankAccountService {
     }
   }
 
+  public void saveAll(Collection<BankAccount> accounts) {
+    try {
+      accountStorage.saveAll(accounts);
+    } catch (IOException e) {
+      System.out.println("Erro ao salvar o arquivo pego do coordenador: " + e);
+    }
+  }
 }

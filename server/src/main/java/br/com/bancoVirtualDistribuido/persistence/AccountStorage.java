@@ -9,6 +9,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import java.util.Collection;
+
+import br.com.bancoVirtualDistribuido.model.BankAccount;
+
 public class AccountStorage {
   private final ObjectMapper mapper = new ObjectMapper();
   private final Path archive;
@@ -128,6 +132,26 @@ public class AccountStorage {
       newAccount.put("balance", 1000);
     }
     accounts.add(newAccount);
+    save();
+  }
+
+  // salva o recebido do coordenador no arquivo
+  public void saveAll(Collection<BankAccount> accounts) throws IOException {
+    ArrayNode accountsArray = mapper.createArrayNode();
+
+    for (BankAccount account : accounts) {
+      ObjectNode node = mapper.createObjectNode();
+
+      node.put("user", account.getUser());
+      node.put("cpf", account.getCpf());
+      node.put("password", account.getPassword());
+      node.put("isDeleted", account.getIsDeleted());
+      node.put("balance", account.getBalance());
+
+      accountsArray.add(node);
+    }
+
+    data.set("accounts", accountsArray);
     save();
   }
 

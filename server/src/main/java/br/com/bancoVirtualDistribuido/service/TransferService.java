@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collection;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -114,6 +115,14 @@ public class TransferService {
       transferStorage.delete(source, destiny);
     } catch (IOException e) {
       System.out.println("Erro ao deletar transação" + e.getMessage());
+    }
+  }
+
+  public void saveAll(Collection<BankTransfer> transfers) {
+    try {
+      transferStorage.saveAll(transfers);
+    } catch (IOException e) {
+      System.out.println("Erro ao salvar dados de transacao recebidos do coordenador" + e.getMessage());
     }
   }
 

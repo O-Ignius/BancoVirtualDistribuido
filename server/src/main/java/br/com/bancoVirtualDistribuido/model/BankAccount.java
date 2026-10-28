@@ -5,13 +5,15 @@ public class BankAccount {
   private String password;
   private double balance;
   private String cpf;
+  private boolean isDeleted;
 
   public BankAccount(String user, String password,
-      double balance, String cpf) {
+      double balance, String cpf, boolean isDeleted) {
     this.user = user;
     this.password = password;
     this.balance = balance;
     this.cpf = cpf;
+    this.isDeleted = isDeleted;
   }
 
   public String getUser() {
@@ -28,5 +30,9 @@ public class BankAccount {
 
   public String getCpf() {
     return cpf;
+  }
+
+  public boolean getIsDeleted() {
+    return isDeleted;
   }
 }

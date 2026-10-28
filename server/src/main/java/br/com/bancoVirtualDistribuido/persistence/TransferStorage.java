@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import br.com.bancoVirtualDistribuido.model.BankTransfer;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +15,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 
 import java.util.UUID;
+import java.util.Collection;
 
 public class TransferStorage {
   private final ObjectMapper mapper = new ObjectMapper();
@@ -179,6 +182,28 @@ public class TransferStorage {
 
     transfers.add(transfer);
 
+    save();
+  }
+
+  // salva dados pegos do coordenador
+  public void saveAll(Collection<BankTransfer> transfers)
+      throws IOException {
+
+    ArrayNode transfersArray = mapper.createArrayNode();
+
+    for (BankTransfer transfer : transfers) {
+      ObjectNode node = mapper.createObjectNode();
+
+      node.put("uuid", transfer.getUUId());
+      node.put("source", transfer.getSource());
+      node.put("destiny", transfer.getDestiny());
+      node.put("amount", transfer.getAmount());
+      node.put("timestamp", transfer.getTimestamp().toString());
+
+      transfersArray.add(node);
+    }
+
+    data.set("transfers", transfersArray);
     save();
   }
 
