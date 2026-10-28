@@ -1,41 +1,72 @@
 #!/bin/bash
-#
 
-########################################
-## 1) Necessário adicionar a pasta do .jar na lista de bibliotecas do CLASSPATH
-LIBS=../libs/java/jgroups-5.0.0.Final.jar:./
-export CLASSPATH=$CLASSPATH:$LIBS
+# Uso:
+# ./executar.sh <qtd_DataNode> [qtd_ControlNode] [compilar]
 
-## 2) Necessário forçar IPv4 para funcionar na rede cabeada dos laboratórios do IFMG
-# IPV4="-Djgroups.bind_addr=172.16.2.222 -Djava.net.preferIPv4Stack=true"
-IPV4="-Djava.net.preferIPv4Stack=true"
+N1=${1:-1}
+N2=${2:-0}
+COMPILAR=${3:-n}
 
-## 2.1) necessário caso existam muitas interfaces virtuais de rede (ex.: com nomes iniciados com br-, docker0, etc)
-get_IP_of_interface() {
-  # ifconfig 2>&1 1>/dev/null || sudo apt install net-tools # instala o ifconfig se não houver
+CLASSE1="br.com.bancoVirtualDistribuido.nodes.DataNode"
+CLASSE2="br.com.bancoVirtualDistribuido.nodes.ControlNode"
 
-  if [[ -n $1 ]]; then
-    ifconfig | grep "$1" -A5 | grep 'inet ' | sed 's/ *inet //; s/\/.*//; s/ .*//; s/[ \t]*//' | tr -d '[:space:]'
-    # ip addr | grep "$1" -A5 | grep 'inet ' | sed 's/ *inet //; s/\/.*//' | tr -d '[:space:]'
-  else
-    ifconfig | grep -E "(eno1|eth0|en0)" -A5 | grep 'inet ' | sed 's/ *inet //; s/\/.*//; s/ .*//; s/[ \t]*//' | tr -d '[:space:]'
-    # ip addr | grep -E "(eno1|eth0|en0)" -A5 | grep 'inet ' | sed 's/ *inet //; s/\/.*//' | tr -d '[:space:]'
-  fi
+export MAVEN_OPTS="${MAVEN_OPTS:+$MAVEN_OPTS }-Djava.net.preferIPv4Stack=true"
+
+PIDS=()
+
+encerrar() {
+  echo
+  echo "Encerrando todas as instâncias..."
+
+  trap - INT TERM
+
+  for pid in "${PIDS[@]}"; do
+    kill -TERM -- "-$pid" 2>/dev/null ||
+      kill -TERM "$pid" 2>/dev/null
+  done
+
+  for pid in "${PIDS[@]}"; do
+    wait "$pid" 2>/dev/null
+  done
+
+  echo "Todas as instâncias foram encerradas."
+  exit 0
 }
-# MEU_IP="$(get_IP_of_interface)"
-# IPV4="$IPV4 -Djgroups.bind_addr=$MEU_IP"
-# echo $IPV4
-########################################
 
-## compila o código-fonte
-#javac Pessoa.java
+trap encerrar INT TERM
 
-## executa 1 processo nesta janela
-java $IPV4 ServidorInstancia #2>/dev/null
+case "$COMPILAR" in
+1 | s | S | y | Y)
+  echo "Compilando projeto..."
+  mvn compile || exit 1
+  ;;
+*)
+  echo "Pulando compilação."
+  ;;
+esac
 
-## executa outros 2 processos em janelas separadas
-# COMANDO="java $IPV4 -cp $LIBS ExemploMeme # 2>/dev/null"
-# echo "$COMANDO"
-# sleep 2
-# ( xterm -hold -e $COMANDO || x-terminal-emulator -e $COMANDO ) &
-# ( xterm -hold -e $COMANDO || x-terminal-emulator -e $COMANDO ) &
+iniciar() {
+  local classe="$1"
+  local nome="$2"
+
+  echo "Iniciando $nome..."
+
+  setsid mvn exec:java \
+    -Dexec.mainClass="$classe" \
+    -Dexec.args="$nome" &
+
+  PIDS+=("$!")
+}
+
+for ((i = 1; i <= N1; i++)); do
+  iniciar "$CLASSE1" "DataNode$i"
+done
+
+for ((i = 1; i <= N2; i++)); do
+  iniciar "$CLASSE2" "ControlNode$i"
+done
+
+echo "Todas as instâncias foram iniciadas."
+echo "Pressione Ctrl+C para encerrar."
+
+wait
