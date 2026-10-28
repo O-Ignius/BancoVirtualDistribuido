@@ -194,9 +194,10 @@ public class DataNode implements Receiver {
 
   public static void main(String[] args) throws Exception {
     // Passa o nome do nó e o caminho dos dois arquivos de persistência locais
-    String name = args.length > 0 ? args[0] : "DataNode {" + UUID.randomUUID().toString() + "}";
-    String accountsPath = args.length > 1 ? args[1] : "database/accounts" + name + ".json";
-    String transfersPath = args.length > 2 ? args[2] : "database/transfers" + name + ".json";
+    String name = args.length > 0 ? args[0] : "DataNode{" + UUID.randomUUID().toString() + "}";
+    String accountsPath = args.length > 1 ? args[1] : Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
+    String transfersPath = args.length > 2 ? args[2]
+        : Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
 
     DataNode node = new DataNode(name, accountsPath, transfersPath);
     node.start();
