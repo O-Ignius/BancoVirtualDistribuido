@@ -1,0 +1,190 @@
+syntax = "proto3";
+
+package bank.data;
+
+option java_package = "br.com.bancoVirtualDistribuido.grpc";
+option java_multiple_files = true;
+option java_outer_classname = "BankDataProto";
+
+// import de tipo
+import "google/protobuf/timestamp.proto";
+
+service BankDataService {
+//----------Conta
+  //tenta login
+    rpc VerifyCredentials(VerifyCredentialsRequest)
+        returns (VerifyCredentialsResponse);
+
+  //le uma conta
+    rpc ReadAccount(ReadAccountRequest)
+        returns (ReadAccountResponse);
+
+    //edita conta já existente
+    rpc EditAccount(EditAccountRequest)
+        returns (EditAccountResponse);
+
+
+    //exclui conta já existente
+    rpc DeleteAccount(DeleteAccountRequest)
+        returns (DeleteAccountResponse);
+
+    // persiste uma conta
+    rpc SaveAccount(SaveAccountRequest)
+        returns (SaveAccountResponse);
+
+//----------Conta
+//
+//----------transferência
+    //recupera transferencias de um dado cpf
+    rpc ReadAllTransferByCPF(ReadAllTransferByCPFRequest)
+        returns (ReadAllTransferByCPFResponse);
+
+    //lê todas as transferencias entre 2 cpfs
+    rpc ReadAllTransferBetweenCPFs(ReadAllTransferBetweenCPFsRequest)
+        returns (ReadAllTransferBetweenCPFsResponse);
+
+    //lê todas entre 2 datas 
+    rpc ReadAllTransferBetweenDate(ReadAllTransferBetweenDateRequest)
+        returns (ReadAllTransferBetweenDateResponse);
+
+    // persiste uma transferência.
+    rpc SaveTransfer(SaveTransferRequest)
+        returns (SaveTransferResponse);
+//----------transferência
+}
+
+// ==============================
+// verifica credencias
+// ==============================
+
+message VerifyCredentialsRequest {
+    string id = 1;
+    string password = 2;
+}
+
+message VerifyCredentialsResponse {
+    bool success = 1;
+}
+
+
+// ==============================
+// Consulta de conta
+// ==============================
+
+message ReadAccountRequest {
+    int64 cpf = 1;
+}
+
+message ReadAccountResponse {
+    bool found = 1;
+    int64 cpf = 2;
+    string owner = 3;
+    int64 balance_cents = 4;
+}
+
+// ==============================
+// Edição de conta
+// ==============================
+message EditAccountRequest {
+    int64 cpf = 1;
+    string owner = 2;
+    string password = 3;
+}
+
+message EditAccountResponse {
+    bool success = 1;
+}
+
+// ==============================
+// Exclusão de conta
+// ==============================
+message DeleteAccountRequest {
+    int64 cpf = 1;
+}
+
+message DeleteAccountResponse {
+    bool success = 1;
+}
+
+// ==============================
+// Persistência de conta
+// ==============================
+
+message SaveAccountRequest {
+    int64 cpf = 1;
+    string owner = 2;
+    string password = 3;
+    int64 balance_cents = 4;
+}
+
+message SaveAccountResponse {
+    bool success = 1;
+}
+
+// ------------------------------------------------------
+// TRANSFERENCIA 
+// ------------------------------------------------------
+message Transfer {
+    string transfer_id = 1;
+    int64 source = 2;
+    int64 destiny= 3;
+    int64 amount_cents = 4;
+    google.protobuf.Timestamp created_at = 5;
+}
+
+// ==============================
+// consulta todas transferencias de um cpf
+// ==============================
+
+message ReadAllTransferByCPFRequest {
+    int64 cpf = 1;
+}
+
+message ReadAllTransferByCPFResponse {
+    bool found = 1;
+    repeated Transfer transfer;
+}
+
+// ==============================
+// Consulta de transferência entre 2 cpfs
+// ==============================
+
+message ReadAllTransferBetweenCPFsRequest {
+    int64 source = 1;
+    int64 destiny = 2;
+}
+
+message ReadAllTransferBetweenCPFsResponse {
+    bool found = 1;
+    repeated Transfer transfer;
+}
+
+
+// ==============================
+// consulta de transferencias entre 2 datas
+// ==============================
+
+message ReadAllTransferBetweenDateRequest {
+    google.protobuf.Timestamp start = 1;
+    google.protobuf.Timestamp end = 2;
+}
+
+message ReadAllTransferBetweenDateResponse {
+    bool found = 1;
+    repeated Transfer transfer;
+}
+
+// ==============================
+// Persistência de transferência
+// ==============================
+
+message SaveTransferRequest {
+    string transfer_id = 1;
+    int64 source_cpf = 2;
+    int64 destination_cpf = 3;
+    int64 amount_cents = 4;
+}
+
+message SaveTransferResponse {
+    bool success = 1;
+}
