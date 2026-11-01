@@ -1,32 +1,146 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <groupId>br.com.bancoVirtualDistribuido</groupId>
-  <artifactId>server</artifactId>
-  <packaging>jar</packaging>
-  <version>1.0-SNAPSHOT</version>
-  <name>server</name>
-  <url>http://maven.apache.org</url>
-  <dependencies>
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>3.8.1</version>
-      <scope>test</scope>
-    </dependency>
+    <modelVersion>4.0.0</modelVersion>
 
-    <dependency>
-      <groupId>org.jgroups</groupId>
-      <artifactId>jgroups</artifactId>
-      <version>5.0.0.Final</version>
-    </dependency>
+    <groupId>br.com.bancoVirtualDistribuido</groupId>
+    <artifactId>server</artifactId>
+    <version>1.0-SNAPSHOT</version>
 
-    <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
-        <version>2.20.1</version>
-    </dependency>
+    <properties>
 
-  </dependencies>
+        <!-- Versão mínima de compatibilidade do código Java.
+             Garante que o projeto seja compilado seguindo as APIs do Java 17. -->
+        <maven.compiler.release>17</maven.compiler.release>
+
+        <!-- Codificação dos arquivos do projeto. -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Versões das bibliotecas gRPC e Protocol Buffers. -->
+        <grpc.version>1.68.1</grpc.version>
+        <protobuf.version>3.25.5</protobuf.version>
+
+    </properties>
+
+    <dependencies>
+
+        <!-- JGroups: comunicação distribuída entre os nós do sistema. -->
+        <dependency>
+            <groupId>org.jgroups</groupId>
+            <artifactId>jgroups</artifactId>
+            <version>5.0.0.Final</version>
+        </dependency>
+
+        <!-- Jackson: serialização e desserialização de objetos JSON. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.20.1</version>
+        </dependency>
+
+        <!-- gRPC Netty: implementação do transporte de comunicação gRPC,
+             utilizando HTTP/2. -->
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+            <version>${grpc.version}</version>
+        </dependency>
+
+        <!-- Integração entre gRPC e Protocol Buffers. -->
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-protobuf</artifactId>
+            <version>${grpc.version}</version>
+        </dependency>
+
+        <!-- Classes necessárias para implementar clientes e servidores gRPC. -->
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
+            <version>${grpc.version}</version>
+        </dependency>
+
+        <!-- Implementação Java das mensagens Protocol Buffers. -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>${protobuf.version}</version>
+        </dependency>
+
+        <!-- API de anotações utilizada pelo código Java gerado pelo gRPC. -->
+        <dependency>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+            <version>1.3.2</version>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+
+        <!-- Extensão do Maven que identifica o sistema operacional
+             e a arquitetura da máquina.
+             Isso permite baixar o executável correto do protoc. -->
+        <extensions>
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>1.7.1</version>
+            </extension>
+        </extensions>
+
+        <plugins>
+
+            <!-- Plugin responsável por gerar as classes Java
+                 a partir dos arquivos .proto. -->
+            <plugin>
+                <groupId>org.xolstice.maven.plugins</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+                <version>0.6.1</version>
+
+                <configuration>
+
+                    <!-- Localização dos contratos .proto.
+                         O pom.xml está em server/, enquanto os contratos
+                         estão em proto/, na raiz do repositório. -->
+                    <protoSourceRoot>
+                        ${project.basedir}/../proto
+                    </protoSourceRoot>
+
+                    <!-- Compilador Protocol Buffers.
+                         Gera as classes Java das mensagens. -->
+                    <protocArtifact>
+                        com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}
+                    </protocArtifact>
+
+                    <!-- Identifica o gerador de código específico do gRPC. -->
+                    <pluginId>grpc-java</pluginId>
+
+                    <!-- Plugin que gera as classes Java de cliente e servidor gRPC. -->
+                    <pluginArtifact>
+                        io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}
+                    </pluginArtifact>
+
+                </configuration>
+
+                <executions>
+                    <execution>
+                        <goals>
+
+                            <!-- Gera as classes Java das mensagens Protocol Buffers. -->
+                            <goal>compile</goal>
+
+                            <!-- Gera as classes Java de serviços e stubs gRPC. -->
+                            <goal>compile-custom</goal>
+
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
 </project>
