@@ -18,7 +18,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.UUID;
 import br.com.bancoVirtualDistribuido.nodes.DataNodeClient;
 import br.com.bancoVirtualDistribuido.config.Constants;
-import br.com.bancoVirtualDistribuido.grpc.*;
+import br.com.bancoVirtualDistribuido.grpc.data.*;
+import br.com.bancoVirtualDistribuido.grpc.service.*;
 
 public class ControlNode implements Receiver {
 
@@ -120,12 +121,12 @@ public class ControlNode implements Receiver {
           nodeName, amount, idSource, idDestiny);
 
       // abstracao grpc
-      boolean success = dataClient.executeDebitAndCredit(idSource, idDestiny, amount);
+      boolean success = dataClient.executeDebitAndCreditData(idSource, idDestiny, amount);
 
       if (success) {
         // salva no no de dados
         String transferId = UUID.randomUUID().toString();
-        dataClient.saveTransfer(transferId, idSource, idDestiny, amount);
+        dataClient.saveTransferData(transferId, idSource, idDestiny, amount);
       }
 
       return success;
@@ -156,43 +157,18 @@ public class ControlNode implements Receiver {
       extends BankServiceGrpc.BankServiceImplBase {
 
     @Override
-    public void createAccount(CreateAccountRequest request,
-        io.grpc.stub.StreamObserver<CreateAccountResponse> responseObserver) {
+    public void createAccountService(CreateAccountServiceRequest request,
+        io.grpc.stub.StreamObserver<CreateAccountServiceResponse> responseObserver) {
 
       System.out.println("[" + nodeName + "] Processando criação de conta para: " + request.getUser());
 
       // O Controle pede para o DataNode salvar a conta (usando o CPF como ID e saldo
       // inicial zero)
-      boolean success = dataClient.saveAccount(request.getCpf(), request.getUser(), 1000.0);
+      boolean success = dataClient.saveAccountData(request.getCpf(), request.getUser(), 1000.0);
 
-      CreateAccountResponse response = CreateAccountResponse
+      CreateAccountServiceResponse response = CreateAccountServiceResponse
           .newBuilder()
           .setSuccess(success)
-          .build();
-
-      responseObserver.onNext(response);
-      responseObserver.onCompleted();
-    }
-
-    @Override
-    public void transfer(TransferRequest request,
-        io.grpc.stub.StreamObserver<TransferResponse> responseObserver) {
-
-      String source = String.valueOf(request.getSourceAccountId());
-      String destiny = String.valueOf(request.getDestinationAccountId());
-      double amount = request.getAmountCents() / 100.0;
-
-      // ==========================================================
-      // AQUI É A MÁGICA: Chama a SUA função que adquire os LOCKS
-      // do JGroups antes de repassar a ordem pro DataNode!
-      // ==========================================================
-      boolean success = processTransfer(source, destiny, amount);
-
-      TransferResponse response = TransferResponse
-          .newBuilder()
-          .setSuccess(success)
-          .setMessage(success ? "Transferência realizada com sucesso!"
-              : "Falha na transferência. Verifique os saldos e contas.")
           .build();
 
       responseObserver.onNext(response);
@@ -202,20 +178,20 @@ public class ControlNode implements Receiver {
     // Métodos de Get (Leitura) - Implementação básica para o compilador não
     // reclamar
     @Override
-    public void getAccount(GetAccountRequest request,
-        io.grpc.stub.StreamObserver<GetAccountResponse> responseObserver) {
+    public void getAccountService(GetAccountServiceRequest request,
+        io.grpc.stub.StreamObserver<GetAccountServiceResponse> responseObserver) {
       // Por enquanto retorna vazio, se quiser buscar saldo depois, chama o
-      // dataClient.readAccount
-      GetAccountResponse response = GetAccountResponse
+      // dataClient.readAccountData
+      GetAccountServiceResponse response = GetAccountServiceResponse
           .newBuilder().build();
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     }
 
     @Override
-    public void getTransfer(GetTransferRequest request,
-        io.grpc.stub.StreamObserver<GetTransferResponse> responseObserver) {
-      GetTransferResponse response = GetTransferResponse
+    public void getTransferService(GetTransferServiceRequest request,
+        io.grpc.stub.StreamObserver<GetTransferServiceResponse> responseObserver) {
+      GetTransferServiceResponse response = GetTransferServiceResponse
           .newBuilder().build();
       responseObserver.onNext(response);
       responseObserver.onCompleted();

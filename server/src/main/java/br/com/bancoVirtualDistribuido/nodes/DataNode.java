@@ -21,7 +21,7 @@ import java.util.UUID;
 import java.time.Instant;
 
 //grpc
-import br.com.bancoVirtualDistribuido.grpc.*; // Seu pacote gerado pelo Maven/Protobuf
+import br.com.bancoVirtualDistribuido.grpc.data.*;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
@@ -271,7 +271,8 @@ public class DataNode implements Receiver {
   private class DataNodeGrpcServiceImpl extends BankDataServiceGrpc.BankDataServiceImplBase {
 
     @Override
-    public void readAccount(ReadAccountRequest request, StreamObserver<ReadAccountResponse> responseObserver) {
+    public void readAccountData(ReadAccountDataRequest request,
+        StreamObserver<ReadAccountDataResponse> responseObserver) {
       // converte int64 pra string
       String accountId = String.valueOf(request.getAccountId());
 
@@ -280,7 +281,7 @@ public class DataNode implements Receiver {
         account = accountsMap.get(accountId);
       }
 
-      ReadAccountResponse.Builder responseBuilder = ReadAccountResponse.newBuilder();
+      ReadAccountDataResponse.Builder responseBuilder = ReadAccountDataResponse.newBuilder();
 
       if (account != null) {
         responseBuilder.setFound(true)
@@ -297,7 +298,8 @@ public class DataNode implements Receiver {
     }
 
     @Override
-    public void saveAccount(SaveAccountRequest request, StreamObserver<SaveAccountResponse> responseObserver) {
+    public void saveAccountData(SaveAccountDataRequest request,
+        StreamObserver<SaveAccountDataResponse> responseObserver) {
       String accountId = String.valueOf(request.getAccountId());
       String owner = String.valueOf(request.getOwner());
       String password = String.valueOf(request.getPassword());
@@ -331,7 +333,7 @@ public class DataNode implements Receiver {
         }
       }
 
-      SaveAccountResponse response = SaveAccountResponse.newBuilder()
+      SaveAccountDataResponse response = SaveAccountDataResponse.newBuilder()
           .setSuccess(isSuccess)
           .build();
 
@@ -340,7 +342,8 @@ public class DataNode implements Receiver {
     }
 
     @Override
-    public void readTransfer(ReadTransferRequest request, StreamObserver<ReadTransferResponse> responseObserver) {
+    public void readTransferData(ReadTransferDataRequest request,
+        StreamObserver<ReadTransferDataResponse> responseObserver) {
       String transferId = request.getTransferId();
 
       BankTransfer transfer;
@@ -348,7 +351,7 @@ public class DataNode implements Receiver {
         transfer = transfersMap.get(transferId);
       }
 
-      ReadTransferResponse.Builder responseBuilder = ReadTransferResponse.newBuilder();
+      ReadTransferDataResponse.Builder responseBuilder = ReadTransferDataResponse.newBuilder();
 
       if (transfer != null) {
         responseBuilder.setFound(true)
@@ -366,7 +369,8 @@ public class DataNode implements Receiver {
     }
 
     @Override
-    public void saveTransfer(SaveTransferRequest request, StreamObserver<SaveTransferResponse> responseObserver) {
+    public void saveTransferData(SaveTransferDataRequest request,
+        StreamObserver<SaveTransferDataResponse> responseObserver) {
       String transferId = request.getTransferId();
       double amount = request.getAmountCents() / 100.0;
 
@@ -388,7 +392,7 @@ public class DataNode implements Receiver {
         }
       }
 
-      SaveTransferResponse response = SaveTransferResponse.newBuilder()
+      SaveTransferDataResponse response = SaveTransferDataResponse.newBuilder()
           .setSuccess(isSuccess)
           .build();
 

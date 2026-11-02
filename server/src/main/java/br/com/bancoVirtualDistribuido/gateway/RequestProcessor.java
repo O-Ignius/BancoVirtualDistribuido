@@ -1,6 +1,6 @@
 package br.com.bancoVirtualDistribuido.gateway;
 
-import br.com.bancoVirtualDistribuido.grpc.*;
+import br.com.bancoVirtualDistribuido.grpc.service.*;
 import io.grpc.stub.StreamObserver;
 
 public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
@@ -13,10 +13,11 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
   }
 
   @Override
-  public void getAccount(GetAccountRequest request, StreamObserver<GetAccountResponse> responseObserver) {
+  public void getAccountService(GetAccountServiceRequest request,
+      StreamObserver<GetAccountServiceResponse> responseObserver) {
     System.out.println("[Gateway] Pedido GetAccount recebido. Repassando ao Controle...");
     try {
-      GetAccountResponse response = controlStub.getAccount(request);
+      GetAccountServiceResponse response = controlStub.getAccountService(request);
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     } catch (Exception e) {
@@ -28,28 +29,11 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
   }
 
   @Override
-  public void transfer(TransferRequest request, StreamObserver<TransferResponse> responseObserver) {
-    System.out.println("[Gateway] Pedido Transfer recebido. Repassando ao Controle...");
-    try {
-      TransferResponse response = controlStub.transfer(request);
-      responseObserver.onNext(response);
-      responseObserver.onCompleted();
-    } catch (Exception e) {
-      System.err.println("[Gateway] Erro ao conectar com Controle: " + e.getMessage());
-      TransferResponse fallback = TransferResponse.newBuilder()
-          .setSuccess(false)
-          .setMessage("Erro no Gateway: Não foi possível contatar o Controle.")
-          .build();
-      responseObserver.onNext(fallback);
-      responseObserver.onCompleted();
-    }
-  }
-
-  @Override
-  public void getTransfer(GetTransferRequest request, StreamObserver<GetTransferResponse> responseObserver) {
+  public void getTransferService(GetTransferServiceRequest request,
+      StreamObserver<GetTransferServiceResponse> responseObserver) {
     System.out.println("[Gateway] Pedido GetTransfer recebido. Repassando ao Controle...");
     try {
-      GetTransferResponse response = controlStub.getTransfer(request);
+      GetTransferServiceResponse response = controlStub.getTransferService(request);
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     } catch (Exception e) {
@@ -61,15 +45,16 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
   }
 
   @Override
-  public void createAccount(CreateAccountRequest request, StreamObserver<CreateAccountResponse> responseObserver) {
+  public void createAccountService(CreateAccountServiceRequest request,
+      StreamObserver<CreateAccountServiceResponse> responseObserver) {
     System.out.println("[Gateway] Pedido CreateAccount recebido. Repassando ao Controle...");
     try {
-      CreateAccountResponse response = controlStub.createAccount(request);
+      CreateAccountServiceResponse response = controlStub.createAccountService(request);
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     } catch (Exception e) {
       System.err.println("[Gateway] Erro ao conectar com Controle: " + e.getMessage());
-      CreateAccountResponse fallback = CreateAccountResponse.newBuilder()
+      CreateAccountServiceResponse fallback = CreateAccountServiceResponse.newBuilder()
           .setSuccess(false)
           .build();
       responseObserver.onNext(fallback);

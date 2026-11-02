@@ -1,7 +1,7 @@
 package br.com.bancoVirtualDistribuido.gateway;
 
 import br.com.bancoVirtualDistribuido.config.Constants;
-import br.com.bancoVirtualDistribuido.grpc.*;
+import br.com.bancoVirtualDistribuido.grpc.service.*;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
