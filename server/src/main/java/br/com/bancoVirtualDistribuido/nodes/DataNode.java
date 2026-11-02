@@ -18,7 +18,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+
+//grpc
+import br.com.bancoVirtualDistribuido.grpc.*; // Seu pacote gerado pelo Maven/Protobuf
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
+import io.grpc.stub.StreamObserver;
 
 public class DataNode implements Receiver {
 
@@ -27,6 +33,8 @@ public class DataNode implements Receiver {
   private String nodeName;
   private String accountDataPath;
   private String transfersDataPath;
+
+  private Server grpcServer;
 
   private final Map<String, BankAccount> accountsMap = new HashMap<>();
   private final Map<String, BankTransfer> transfersMap = new HashMap<>();
@@ -76,6 +84,14 @@ public class DataNode implements Receiver {
     channel.getState(null, Constants.timeOut);
 
     System.out.println("[" + nodeName + "] Nó de dados pronto e conectado ao canal de dados.");
+
+    // inicia grpc para comunicar com server controle
+    grpcServer = ServerBuilder.forPort(Constants.DATA_NODE_PORT)
+        .addService(new DataNodeGrpcServiceImpl()) // Registra a classe tradutora (ver passo 3)
+        .build()
+        .start();
+    System.out.println("[" + nodeName + "] Servidor gRPC escutando o Controle na porta " + Constants.DATA_NODE_PORT);
+
     showAmount();
   }
 
@@ -132,6 +148,61 @@ public class DataNode implements Receiver {
 
   // ----------------------------- RPC --------------------------------------
 
+  public boolean verifyCredentials(String cpf, String password) {
+    synchronized (accountsMap) {
+      BankAccount account = accountsMap.get(cpf);
+
+      if (account == null) {
+        return false;
+      }
+
+      return account.getPassword().equals(password);
+    }
+  }
+
+  public boolean createAccount(String user, String cpf, String password) {
+    synchronized (accountsMap) {
+
+      if (accountsMap.containsKey(cpf)) {
+        return false;
+      }
+
+      // cria conta no arquivo
+      if (!accountService.create(user, cpf, password)) {
+        return false;
+      }
+
+      // pega conta
+      BankAccount account = accountService.readAccount(cpf);
+      // Atualiza o HashMap
+      accountsMap.put(cpf, account);
+
+      return true;
+    }
+  }
+
+  public boolean modifyAccount(String newUser, String cpf, String newPassword) {
+    synchronized (accountsMap) {
+
+      BankAccount account = accountsMap.get(cpf);
+
+      if (account == null) {
+        return false;
+      }
+
+      account.setUser(newUser);
+      account.setPassword(newPassword);
+
+      try {
+        accountService.saveAll(accountsMap.values());
+        return true;
+      } catch (Exception e) {
+        e.printStackTrace();
+        return false;
+      }
+    }
+  }
+
   public boolean debitAndCredit(String idSource, String idDestiny, double amount) {
     // mantem consistencia durante escrita
     synchronized (accountsMap) {
@@ -148,7 +219,7 @@ public class DataNode implements Receiver {
 
         // 2. Cria e armazena o histórico da transferência
         String transferId = java.util.UUID.randomUUID().toString();
-        BankTransfer newTransfer = new BankTransfer(transferId, idSource, idDestiny, amount, LocalDateTime.now());
+        BankTransfer newTransfer = new BankTransfer(transferId, idSource, idDestiny, amount, Instant.now());
         transfersMap.put(transferId, newTransfer);
 
         // 3. Persiste imediatamente as modificações nos dois arquivos JSON do nó
@@ -169,13 +240,13 @@ public class DataNode implements Receiver {
     }
   }
 
-  public BankAccount buscarConta(String idConta) {
+  public BankAccount getAccount(String idConta) {
     synchronized (accountsMap) {
       return accountsMap.get(idConta);
     }
   }
 
-  // --- Auditoria / Debug Exigido no Barema ---
+  // --- Auditoria / Debug ---
 
   private void showAmount() {
     synchronized (accountsMap) {
@@ -187,8 +258,142 @@ public class DataNode implements Receiver {
   }
 
   public void stop() {
+    if (grpcServer != null) {
+      grpcServer.shutdown();
+    }
     if (channel != null) {
       channel.close();
+    }
+  }
+
+  // ------------------Tradutores ------------------------------
+
+  private class DataNodeGrpcServiceImpl extends BankDataServiceGrpc.BankDataServiceImplBase {
+
+    @Override
+    public void readAccount(ReadAccountRequest request, StreamObserver<ReadAccountResponse> responseObserver) {
+      // converte int64 pra string
+      String accountId = String.valueOf(request.getAccountId());
+
+      BankAccount account;
+      synchronized (accountsMap) {
+        account = accountsMap.get(accountId);
+      }
+
+      ReadAccountResponse.Builder responseBuilder = ReadAccountResponse.newBuilder();
+
+      if (account != null) {
+        responseBuilder.setFound(true)
+            .setAccountId(request.getAccountId())
+            .setOwner(account.getUser())
+            // converte pra centavos para melhor acuracia
+            .setBalanceCents((long) (account.getBalance() * 100));
+      } else {
+        responseBuilder.setFound(false);
+      }
+
+      responseObserver.onNext(responseBuilder.build());
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void saveAccount(SaveAccountRequest request, StreamObserver<SaveAccountResponse> responseObserver) {
+      String accountId = String.valueOf(request.getAccountId());
+      String owner = String.valueOf(request.getOwner());
+      String password = String.valueOf(request.getPassword());
+      double balance = request.getBalanceCents() / 100.0;
+
+      boolean isSuccess = true;
+      synchronized (accountsMap) {
+        try {
+          BankAccount account = accountsMap.get(accountId);
+
+          if (account == null) {
+            // Se não existir, cria e define o saldo
+            account = new BankAccount();
+            account.setCpf(accountId);
+            account.setPassword(password);
+            account.setUser(owner);
+            account.setBalance(balance);
+          } else {
+            // Se já existir, não altera o saldo
+            account.setUser(owner);
+            account.setPassword(password);
+          }
+
+          accountsMap.put(accountId, account);
+
+          // salva localmente
+          accountService.saveAll(accountsMap.values());
+        } catch (Exception e) {
+          e.printStackTrace();
+          isSuccess = false;
+        }
+      }
+
+      SaveAccountResponse response = SaveAccountResponse.newBuilder()
+          .setSuccess(isSuccess)
+          .build();
+
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void readTransfer(ReadTransferRequest request, StreamObserver<ReadTransferResponse> responseObserver) {
+      String transferId = request.getTransferId();
+
+      BankTransfer transfer;
+      synchronized (transfersMap) {
+        transfer = transfersMap.get(transferId);
+      }
+
+      ReadTransferResponse.Builder responseBuilder = ReadTransferResponse.newBuilder();
+
+      if (transfer != null) {
+        responseBuilder.setFound(true)
+            .setTransferId(transfer.getUUId())
+            .setSourceAccountId(Long.parseLong(transfer.getSource()))
+            .setDestinationAccountId(Long.parseLong(transfer.getDestiny()))
+            .setAmountCents((long) (transfer.getAmount() * 100))
+            .setStatus("COMPLETED"); // Or whatever status is in your class
+      } else {
+        responseBuilder.setFound(false);
+      }
+
+      responseObserver.onNext(responseBuilder.build());
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void saveTransfer(SaveTransferRequest request, StreamObserver<SaveTransferResponse> responseObserver) {
+      String transferId = request.getTransferId();
+      double amount = request.getAmountCents() / 100.0;
+
+      boolean isSuccess = true;
+      synchronized (transfersMap) {
+        try {
+          BankTransfer newTransfer = new BankTransfer(
+              transferId,
+              String.valueOf(request.getSourceAccountId()),
+              String.valueOf(request.getDestinationAccountId()),
+              amount,
+              Instant.now());
+
+          transfersMap.put(transferId, newTransfer);
+          transferService.saveAll(transfersMap.values());
+        } catch (Exception e) {
+          e.printStackTrace();
+          isSuccess = false;
+        }
+      }
+
+      SaveTransferResponse response = SaveTransferResponse.newBuilder()
+          .setSuccess(isSuccess)
+          .build();
+
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
     }
   }
 
