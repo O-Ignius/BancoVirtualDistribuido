@@ -16,6 +16,9 @@ public class BankAccount {
     this.isDeleted = isDeleted;
   }
 
+  public BankAccount() {
+  }
+
   public String getUser() {
     return user;
   }
