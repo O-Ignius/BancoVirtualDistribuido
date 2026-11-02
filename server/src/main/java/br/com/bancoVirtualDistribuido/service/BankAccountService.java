@@ -43,20 +43,30 @@ public class BankAccountService {
   public BankAccountService() {
   }
 
-  public void login(String id, String password) {
+  public boolean login(String id, String password) {
     if (accountStorage.loginAccount(id, password)) {
-      System.out.println("Login com sucesso!");
+      return true;
     } else {
-      System.out.println("Login ou Senha inválidos!");
+      return false;
     }
   }
 
   public void create() {
     try {
-      accountStorage.createAccount(user, cpf, password);
+      accountStorage.createAccount(this.user, this.cpf, this.password);
     } catch (IOException e) {
       System.out.println("Erro no salvamento do arquivo de transferencias: " + e.getMessage());
     }
+  }
+
+  public boolean create(String user, String cpf, String password) {
+    try {
+      accountStorage.createAccount(user, cpf, password);
+    } catch (IOException e) {
+      return false;
+    }
+
+    return true;
   }
 
   public BankAccount[] readAll() {
