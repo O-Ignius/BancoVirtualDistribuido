@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block titulo %}Abrir conta · Banco Virtual{% endblock %}
+{% block conteudo %}
+<section class="cartao estreito">
+  <h1>Abrir conta</h1>
+  <p class="secundario">Toda conta nova começa com R$ 1.000,00.</p>
+  <form method="post">
+    <label>Nome completo
+      <input name="nome" value="{{ request.form.nome }}" autocomplete="name" required autofocus>
+    </label>
+    <label>CPF
+      <input name="cpf" value="{{ request.form.cpf }}" inputmode="numeric" placeholder="000.000.000-00" required>
+    </label>
+    <label>Senha
+      <input name="senha" type="password" autocomplete="new-password" required>
+    </label>
+    <label>Confirmar senha
+      <input name="confirmacao" type="password" autocomplete="new-password" required>
+    </label>
+    <button type="submit">Criar conta</button>
+  </form>
+  <p class="secundario">Já tem conta? <a href="{{ url_for('login') }}">Entrar</a></p>
+</section>
+{% endblock %}

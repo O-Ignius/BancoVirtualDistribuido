@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Banco Virtual{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  <header class="topo">
+    <a class="marca" href="{{ url_for('inicio') }}">Banco Virtual</a>
+    {% if session.cpf %}
+      <nav>
+        <span class="usuario">{{ session.cpf | cpf }}</span>
+        <a href="{{ url_for('sair') }}">Sair</a>
+      </nav>
+    {% endif %}
+  </header>
+
+  <main class="conteudo">
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% for categoria, mensagem in mensagens %}
+        <div class="alerta alerta-{{ categoria }}">{{ mensagem }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% block conteudo %}{% endblock %}
+  </main>
+
+  <footer class="rodape" id="auditoria">
+    <span class="rotulo">Auditoria</span>
+    {% if montante %}
+      {% set esperado = montante.contas * 100000 %}
+      <span>Montante: <strong data-campo="total">{{ montante.total_centavos | reais }}</strong></span>
+      <span>Contas: <strong data-campo="contas">{{ montante.contas }}</strong></span>
+      <span>Esperado: <strong data-campo="esperado">{{ esperado | reais }}</strong></span>
+      <span class="selo {{ 'ok' if montante.total_centavos == esperado else 'falha' }}" data-campo="selo">
+        {{ 'consistente' if montante.total_centavos == esperado else 'DIVERGENTE' }}
+      </span>
+    {% else %}
+      <span class="indisponivel">montante indisponível no servidor</span>
+    {% endif %}
+  </footer>
+
+  <script>
+    // Atualiza o rodapé de auditoria periodicamente, sem recarregar a página.
+    setInterval(async () => {
+      try {
+        const m = await (await fetch("{{ url_for('api_montante') }}")).json();
+        if (!m) return;
+        const rodape = document.getElementById("auditoria");
+        const campo = (nome) => rodape.querySelector(`[data-campo="${nome}"]`);
+        if (!campo("total")) return location.reload();
+        campo("total").textContent = m.total;
+        campo("contas").textContent = m.contas;
+        campo("esperado").textContent = m.esperado;
+        campo("selo").textContent = m.consistente ? "consistente" : "DIVERGENTE";
+        campo("selo").className = "selo " + (m.consistente ? "ok" : "falha");
+      } catch (_) { /* servidor fora do ar: mantém o último valor */ }
+    }, 3000);
+  </script>
+</body>
+</html>
