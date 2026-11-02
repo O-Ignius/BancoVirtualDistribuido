@@ -1,0 +1,93 @@
+package br.com.bancoVirtualDistribuido.nodes;
+
+import br.com.bancoVirtualDistribuido.config.Constants;
+import br.com.bancoVirtualDistribuido.grpc.*;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+
+public class DataNodeClient {
+
+  private final ManagedChannel channel;
+  private final BankDataServiceGrpc.BankDataServiceBlockingStub stub;
+
+  public DataNodeClient() {
+    this.channel = ManagedChannelBuilder.forAddress(Constants.dataServerIp, Constants.DATA_NODE_PORT)
+        .usePlaintext()
+        .build();
+    this.stub = BankDataServiceGrpc.newBlockingStub(channel);
+    System.out.println(
+        "[DataNodeClient] Conectado ao DataNode em " + Constants.dataServerIp + " :" + Constants.DATA_NODE_PORT);
+  }
+
+  public void shutdown() {
+    if (channel != null && !channel.isShutdown()) {
+      channel.shutdown();
+    }
+  }
+
+  public boolean readAccount(String accountId) {
+    ReadAccountRequest request = ReadAccountRequest.newBuilder()
+        .setAccountId(Long.parseLong(accountId))
+        .build();
+    ReadAccountResponse response = stub.readAccount(request);
+    return response.getFound();
+  }
+
+  public boolean saveAccount(String accountId, String owner, double balance) {
+    SaveAccountRequest request = SaveAccountRequest.newBuilder()
+        .setAccountId(Long.parseLong(accountId))
+        .setOwner(owner)
+        .setBalanceCents((long) (balance * 100))
+        .build();
+    SaveAccountResponse response = stub.saveAccount(request);
+    return response.getSuccess();
+  }
+
+  public boolean saveTransfer(String transferId, String sourceId, String destinyId, double amount) {
+    SaveTransferRequest request = SaveTransferRequest.newBuilder()
+        .setTransferId(transferId)
+        .setSourceAccountId(Long.parseLong(sourceId))
+        .setDestinationAccountId(Long.parseLong(destinyId))
+        .setAmountCents((long) (amount * 100))
+        .build();
+    SaveTransferResponse response = stub.saveTransfer(request);
+    return response.getSuccess();
+  }
+
+  public boolean executeDebitAndCredit(String idSource, String idDestiny, double amount) {
+    // busca saldo das contas
+    ReadAccountResponse sourceResponse = stub.readAccount(ReadAccountRequest.newBuilder()
+        .setAccountId(Long.parseLong(idSource)).build());
+    ReadAccountResponse destinyResponse = stub.readAccount(ReadAccountRequest.newBuilder()
+        .setAccountId(Long.parseLong(idDestiny)).build());
+
+    if (!sourceResponse.getFound() || !destinyResponse.getFound()) {
+      return false;
+    }
+
+    long amountCents = (long) (amount * 100);
+
+    // saldo disponivel menor que valor de transferencia
+    if (sourceResponse.getBalanceCents() < amountCents) {
+      return false;
+    }
+
+    // atualiza origem
+    SaveAccountRequest saveSource = SaveAccountRequest.newBuilder()
+        .setAccountId(sourceResponse.getAccountId())
+        .setOwner(sourceResponse.getOwner())
+        .setBalanceCents(sourceResponse.getBalanceCents() - amountCents)
+        .build();
+    boolean sourceSuccess = stub.saveAccount(saveSource).getSuccess();
+
+    // atualiza destino
+    SaveAccountRequest saveDestiny = SaveAccountRequest.newBuilder()
+        .setAccountId(destinyResponse.getAccountId())
+        .setOwner(destinyResponse.getOwner())
+        .setBalanceCents(destinyResponse.getBalanceCents() + amountCents)
+        .build();
+    boolean destinySuccess = stub.saveAccount(saveDestiny).getSuccess();
+
+    return sourceSuccess && destinySuccess;
+  }
+}
