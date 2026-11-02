@@ -255,3 +255,5 @@ __marimo__/
 
 client/bank_service_pb2.py
 client/bank_service_pb2_grpc.py
+
+.pdf
