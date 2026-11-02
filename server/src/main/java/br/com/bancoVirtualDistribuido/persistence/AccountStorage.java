@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 
 import br.com.bancoVirtualDistribuido.model.BankAccount;
+import br.com.bancoVirtualDistribuido.config.Constants;
 
 public class AccountStorage {
   private final ObjectMapper mapper = new ObjectMapper();
@@ -128,8 +129,9 @@ public class AccountStorage {
     newAccount.put("password", password);
     // Saldo inicial de 1000 dinheiros
     if (!reCreating) {
+      System.out.println("TAAAAAA RECRIANDOOOOOOO");
       newAccount.put("isDeleted", false);
-      newAccount.put("balance", 1000);
+      newAccount.put("balance", Constants.inititalBalance);
     }
     accounts.add(newAccount);
     save();

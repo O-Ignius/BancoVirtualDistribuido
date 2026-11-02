@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.format.DateTimeParseException;
 
 import java.util.UUID;
@@ -117,8 +117,8 @@ public class TransferStorage {
 
   // pega todas por determinada data/hora
   public ArrayNode searchByDateTime(
-      LocalDateTime start,
-      LocalDateTime end) {
+      Instant start,
+      Instant end) {
     if (start.isAfter(end)) {
       throw new IllegalArgumentException(
           "Start date must be before end date.");
@@ -131,7 +131,7 @@ public class TransferStorage {
       String timestamp = transfer.path("timestamp").asText();
 
       try {
-        LocalDateTime dateTime = LocalDateTime.parse(timestamp);
+        Instant dateTime = Instant.parse(timestamp);
 
         // Inclui os limites inicial e final
         if (!dateTime.isBefore(start)
@@ -152,7 +152,7 @@ public class TransferStorage {
       String source,
       String destiny,
       double amount,
-      LocalDateTime timestamp) throws IOException {
+      Instant timestamp) throws IOException {
 
     if (source == null || source.isBlank()
         || destiny == null || destiny.isBlank()) {
