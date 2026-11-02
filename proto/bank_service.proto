@@ -142,7 +142,7 @@ message GetTransfersByCPFRequest {
 
 message GetTransferByCPFResponse {
     bool found = 1;
-    repeated Transfer transfer;
+    repeated Transfer transfer = 2;
 }
 
 // ==============================
@@ -156,7 +156,7 @@ message GetAllTransferBetweenCPFsRequest {
 
 message GetAllTransferBetweenCPFsResponse {
     bool found = 1;
-    repeated Transfer transfer;
+    repeated Transfer transfer = 2;
 }
 
 

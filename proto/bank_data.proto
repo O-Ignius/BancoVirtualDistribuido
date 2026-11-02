@@ -156,7 +156,7 @@ message ReadAllTransferBetweenCPFsRequest {
 
 message ReadAllTransferBetweenCPFsResponse {
     bool found = 1;
-    repeated Transfer transfer;
+    repeated Transfer transfer = 2;
 }
 
 
@@ -171,7 +171,7 @@ message ReadAllTransferBetweenDateRequest {
 
 message ReadAllTransferBetweenDateResponse {
     bool found = 1;
-    repeated Transfer transfer;
+    repeated Transfer transfer = 2;
 }
 
 // ==============================
