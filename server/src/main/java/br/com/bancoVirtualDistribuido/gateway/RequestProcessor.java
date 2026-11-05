@@ -13,6 +13,20 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
   }
 
   @Override
+  public void login(LoginRequest request, StreamObserver<LoginResponse> responseObserver) {
+    try {
+      LoginResponse response = controlStub.login(request);
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    } catch (Exception e) {
+      System.err.println("[Gateway] Erro ao conectar com Controle: " + e.getMessage());
+      responseObserver.onError(io.grpc.Status.UNAVAILABLE
+          .withDescription("Serviço de Controle indisponível.")
+          .asRuntimeException());
+    }
+  }
+
+  @Override
   public void getAccount(GetAccountRequest request, StreamObserver<GetAccountResponse> responseObserver) {
     System.out.println("[Gateway] Pedido GetAccount recebido. Repassando ao Controle...");
     try {
@@ -28,23 +42,23 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
   }
 
   @Override
-  public void transfer(TransferRequest request, StreamObserver<TransferResponse> responseObserver) {
-    System.out.println("[Gateway] Pedido Transfer recebido. Repassando ao Controle...");
+  public void saveTransfer(SaveTransferRequest request, StreamObserver<SaveTransferResponse> responseObserver) {
+    System.out.println("[Gateway] Pedido SaveTransfer recebido. Repassando ao Controle...");
     try {
-      TransferResponse response = controlStub.transfer(request);
+      SaveTransferResponse response = controlStub.saveTransfer(request);
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     } catch (Exception e) {
       System.err.println("[Gateway] Erro ao conectar com Controle: " + e.getMessage());
-      TransferResponse fallback = TransferResponse.newBuilder()
+      SaveTransferResponse fallback = SaveTransferResponse.newBuilder()
           .setSuccess(false)
-          .setMessage("Erro no Gateway: Não foi possível contatar o Controle.")
           .build();
       responseObserver.onNext(fallback);
       responseObserver.onCompleted();
     }
   }
 
+  /*
   @Override
   public void getTransfer(GetTransferRequest request, StreamObserver<GetTransferResponse> responseObserver) {
     System.out.println("[Gateway] Pedido GetTransfer recebido. Repassando ao Controle...");
@@ -59,6 +73,7 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
           .asRuntimeException());
     }
   }
+  */
 
   @Override
   public void createAccount(CreateAccountRequest request, StreamObserver<CreateAccountResponse> responseObserver) {

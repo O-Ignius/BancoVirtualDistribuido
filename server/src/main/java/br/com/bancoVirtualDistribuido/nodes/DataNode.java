@@ -21,7 +21,7 @@ import java.util.UUID;
 import java.time.Instant;
 
 //grpc
-import br.com.bancoVirtualDistribuido.grpc.*; // Seu pacote gerado pelo Maven/Protobuf
+import br.com.bancoVirtualDistribuido.grpc.data.*;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
@@ -148,15 +148,15 @@ public class DataNode implements Receiver {
 
   // ----------------------------- RPC --------------------------------------
 
-  public boolean verifyCredentials(String cpf, String password) {
+  public boolean verifyCredentials(String id, String password) {
     synchronized (accountsMap) {
-      BankAccount account = accountsMap.get(cpf);
-
-      if (account == null) {
-        return false;
+      for (BankAccount account : accountsMap.values()) {
+        boolean matchesId = id.equals(account.getCpf()) || id.equals(account.getUser());
+        if (!account.getIsDeleted() && matchesId && password.equals(account.getPassword())) {
+          return true;
+        }
       }
-
-      return account.getPassword().equals(password);
+      return false;
     }
   }
 
@@ -271,9 +271,19 @@ public class DataNode implements Receiver {
   private class DataNodeGrpcServiceImpl extends BankDataServiceGrpc.BankDataServiceImplBase {
 
     @Override
+    public void verifyCredentials(VerifyCredentialsRequest request,
+        StreamObserver<VerifyCredentialsResponse> responseObserver) {
+      VerifyCredentialsResponse response = VerifyCredentialsResponse.newBuilder()
+          .setSuccess(DataNode.this.verifyCredentials(request.getId(), request.getPassword()))
+          .build();
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    }
+
+    @Override
     public void readAccount(ReadAccountRequest request, StreamObserver<ReadAccountResponse> responseObserver) {
       // converte int64 pra string
-      String accountId = String.valueOf(request.getAccountId());
+      String accountId = String.valueOf(request.getCpf());
 
       BankAccount account;
       synchronized (accountsMap) {
@@ -284,7 +294,7 @@ public class DataNode implements Receiver {
 
       if (account != null) {
         responseBuilder.setFound(true)
-            .setAccountId(request.getAccountId())
+            .setCpf(request.getCpf())
             .setOwner(account.getUser())
             // converte pra centavos para melhor acuracia
             .setBalanceCents((long) (account.getBalance() * 100));
@@ -298,7 +308,7 @@ public class DataNode implements Receiver {
 
     @Override
     public void saveAccount(SaveAccountRequest request, StreamObserver<SaveAccountResponse> responseObserver) {
-      String accountId = String.valueOf(request.getAccountId());
+      String accountId = String.valueOf(request.getCpf());
       String owner = String.valueOf(request.getOwner());
       String password = String.valueOf(request.getPassword());
       double balance = request.getBalanceCents() / 100.0;
@@ -318,7 +328,9 @@ public class DataNode implements Receiver {
           } else {
             // Se já existir, não altera o saldo
             account.setUser(owner);
-            account.setPassword(password);
+            if (!password.isEmpty()) {
+              account.setPassword(password);
+            }
           }
 
           accountsMap.put(accountId, account);
@@ -339,6 +351,7 @@ public class DataNode implements Receiver {
       responseObserver.onCompleted();
     }
 
+    /*
     @Override
     public void readTransfer(ReadTransferRequest request, StreamObserver<ReadTransferResponse> responseObserver) {
       String transferId = request.getTransferId();
@@ -364,6 +377,7 @@ public class DataNode implements Receiver {
       responseObserver.onNext(responseBuilder.build());
       responseObserver.onCompleted();
     }
+    */
 
     @Override
     public void saveTransfer(SaveTransferRequest request, StreamObserver<SaveTransferResponse> responseObserver) {
@@ -375,8 +389,8 @@ public class DataNode implements Receiver {
         try {
           BankTransfer newTransfer = new BankTransfer(
               transferId,
-              String.valueOf(request.getSourceAccountId()),
-              String.valueOf(request.getDestinationAccountId()),
+              String.valueOf(request.getSourceCpf()),
+              String.valueOf(request.getDestinationCpf()),
               amount,
               Instant.now());
 

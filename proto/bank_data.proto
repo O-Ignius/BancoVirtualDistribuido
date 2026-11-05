@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package bank.data;
 
-option java_package = "br.com.bancoVirtualDistribuido.grpc";
+option java_package = "br.com.bancoVirtualDistribuido.grpc.data";
 option java_multiple_files = true;
 option java_outer_classname = "BankDataProto";
 
@@ -142,7 +142,7 @@ message ReadAllTransferByCPFRequest {
 
 message ReadAllTransferByCPFResponse {
     bool found = 1;
-    repeated Transfer transfer;
+    repeated Transfer transfer = 2;
 }
 
 // ==============================

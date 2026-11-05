@@ -1,7 +1,7 @@
 package br.com.bancoVirtualDistribuido.nodes;
 
 import br.com.bancoVirtualDistribuido.config.Constants;
-import br.com.bancoVirtualDistribuido.grpc.*;
+import br.com.bancoVirtualDistribuido.grpc.data.*;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 
@@ -25,18 +25,28 @@ public class DataNodeClient {
     }
   }
 
-  public boolean readAccount(String accountId) {
+  public boolean verifyCredentials(String id, String password) {
+    VerifyCredentialsRequest request = VerifyCredentialsRequest.newBuilder()
+        .setId(id)
+        .setPassword(password)
+        .build();
+    VerifyCredentialsResponse response = stub.verifyCredentials(request);
+    return response.getSuccess();
+  }
+
+  public boolean readAccount(String cpf) {
     ReadAccountRequest request = ReadAccountRequest.newBuilder()
-        .setAccountId(Long.parseLong(accountId))
+        .setCpf(Long.parseLong(cpf))
         .build();
     ReadAccountResponse response = stub.readAccount(request);
     return response.getFound();
   }
 
-  public boolean saveAccount(String accountId, String owner, double balance) {
+  public boolean saveAccount(String cpf, String owner, String password, double balance) {
     SaveAccountRequest request = SaveAccountRequest.newBuilder()
-        .setAccountId(Long.parseLong(accountId))
+        .setCpf(Long.parseLong(cpf))
         .setOwner(owner)
+        .setPassword(password)
         .setBalanceCents((long) (balance * 100))
         .build();
     SaveAccountResponse response = stub.saveAccount(request);
@@ -46,8 +56,8 @@ public class DataNodeClient {
   public boolean saveTransfer(String transferId, String sourceId, String destinyId, double amount) {
     SaveTransferRequest request = SaveTransferRequest.newBuilder()
         .setTransferId(transferId)
-        .setSourceAccountId(Long.parseLong(sourceId))
-        .setDestinationAccountId(Long.parseLong(destinyId))
+        .setSourceCpf(Long.parseLong(sourceId))
+        .setDestinationCpf(Long.parseLong(destinyId))
         .setAmountCents((long) (amount * 100))
         .build();
     SaveTransferResponse response = stub.saveTransfer(request);
@@ -57,9 +67,9 @@ public class DataNodeClient {
   public boolean executeDebitAndCredit(String idSource, String idDestiny, double amount) {
     // busca saldo das contas
     ReadAccountResponse sourceResponse = stub.readAccount(ReadAccountRequest.newBuilder()
-        .setAccountId(Long.parseLong(idSource)).build());
+        .setCpf(Long.parseLong(idSource)).build());
     ReadAccountResponse destinyResponse = stub.readAccount(ReadAccountRequest.newBuilder()
-        .setAccountId(Long.parseLong(idDestiny)).build());
+        .setCpf(Long.parseLong(idDestiny)).build());
 
     if (!sourceResponse.getFound() || !destinyResponse.getFound()) {
       return false;
@@ -74,7 +84,7 @@ public class DataNodeClient {
 
     // atualiza origem
     SaveAccountRequest saveSource = SaveAccountRequest.newBuilder()
-        .setAccountId(sourceResponse.getAccountId())
+        .setCpf(sourceResponse.getCpf())
         .setOwner(sourceResponse.getOwner())
         .setBalanceCents(sourceResponse.getBalanceCents() - amountCents)
         .build();
@@ -82,7 +92,7 @@ public class DataNodeClient {
 
     // atualiza destino
     SaveAccountRequest saveDestiny = SaveAccountRequest.newBuilder()
-        .setAccountId(destinyResponse.getAccountId())
+        .setCpf(destinyResponse.getCpf())
         .setOwner(destinyResponse.getOwner())
         .setBalanceCents(destinyResponse.getBalanceCents() + amountCents)
         .build();

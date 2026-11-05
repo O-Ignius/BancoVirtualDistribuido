@@ -167,18 +167,18 @@ class BancoGrpc:
         return self._chamar(self._stub.GetAccount, self._pb.GetAccountRequest(cpf=int(cpf))).balance_cents
 
     def transferir(self, origem, destino, valor_centavos):
-        if not hasattr(self._pb, "TransferRequest"):
-            raise OperacaoNaoSuportada("Falta o RPC Transfer no bank_service.proto.")
+        if not hasattr(self._pb, "SaveTransferRequest"):
+            raise OperacaoNaoSuportada("Falta a mensagem SaveTransferRequest no bank_service.proto.")
         resp = self._chamar(
-            self._stub.Transfer,
-            self._pb.TransferRequest(
-                source_account_id=int(origem),
-                destination_account_id=int(destino),
+            self._stub.SaveTransfer,
+            self._pb.SaveTransferRequest(
+                source_cpf=int(origem),
+                destination_cpf=int(destino),
                 amount_cents=valor_centavos,
             ),
         )
         if not resp.success:
-            raise ErroBanco(resp.message or "Transferência recusada.")
+            raise ErroBanco("Transferência recusada.")
         return True
 
     def extrato(self, cpf):
