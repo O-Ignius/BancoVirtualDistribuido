@@ -1,7 +1,10 @@
 package br.com.bancoVirtualDistribuido.service;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Collection;
@@ -15,7 +18,7 @@ public class TransferService {
   private String source;
   private String destiny;
   private double amount;
-  private LocalDateTime timestamp;
+  private Instant timestamp;
 
   private TransferStorage transferStorage;
   private BankAccountService accountService;
@@ -25,7 +28,7 @@ public class TransferService {
     this.source = source;
     this.destiny = destiny;
     this.amount = amount;
-    this.timestamp = LocalDateTime.now();
+    this.timestamp = Instant.now();
     this.accountService = new BankAccountService(pathAccountStorage);
 
     try {
@@ -84,7 +87,7 @@ public class TransferService {
             item.path("source").asText(),
             item.path("destiny").asText(),
             item.path("amount").asDouble(),
-            LocalDateTime.parse(item.path("timestamp").asText()));
+            parseTimestamp(item.path("timestamp").asText()));
 
         transfers.add(transfer);
       }
@@ -118,7 +121,7 @@ public class TransferService {
             item.path("source").asText(),
             item.path("destiny").asText(),
             item.path("amount").asDouble(),
-            LocalDateTime.parse(timestamp));
+            parseTimestamp(timestamp));
 
         transfers.add(transfer);
       }
@@ -142,6 +145,16 @@ public class TransferService {
       transferStorage.saveAll(transfers);
     } catch (IOException e) {
       System.out.println("Erro ao salvar dados de transacao recebidos do coordenador" + e.getMessage());
+    }
+  }
+
+  private Instant parseTimestamp(String timestamp) {
+    try {
+      return Instant.parse(timestamp);
+    } catch (DateTimeParseException e) {
+      return LocalDateTime.parse(timestamp)
+          .atZone(ZoneId.systemDefault())
+          .toInstant();
     }
   }
 

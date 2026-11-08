@@ -100,7 +100,10 @@ public class ControlNode implements Receiver {
 
   // ---------- RPC ------------
 
-  public boolean login(String idCliente) {
+  public boolean login(String idCliente, String password) {
+    if (!dataClient.verifyCredentials(idCliente, password)) {
+      return false;
+    }
     synchronized (loggedClients) {
       loggedClients.add(idCliente);
     }
@@ -157,16 +160,51 @@ public class ControlNode implements Receiver {
       extends BankServiceGrpc.BankServiceImplBase {
 
     @Override
-    public void createAccountService(CreateAccountServiceRequest request,
-        io.grpc.stub.StreamObserver<CreateAccountServiceResponse> responseObserver) {
+    public void login(LoginRequest request,
+        io.grpc.stub.StreamObserver<LoginResponse> responseObserver) {
+      boolean success = ControlNode.this.login(request.getId(), request.getPassword());
+      LoginResponse response = LoginResponse.newBuilder()
+          .setSuccess(success)
+          .build();
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void createAccount(CreateAccountRequest request,
+        io.grpc.stub.StreamObserver<CreateAccountResponse> responseObserver) {
 
       System.out.println("[" + nodeName + "] Processando criação de conta para: " + request.getUser());
 
       // O Controle pede para o DataNode salvar a conta (usando o CPF como ID e saldo
       // inicial zero)
-      boolean success = dataClient.saveAccountData(request.getCpf(), request.getUser(), 1000.0);
+      boolean success = dataClient.saveAccount(
+          String.valueOf(request.getCpf()), request.getUser(), request.getPassword(), 1000.0);
 
       CreateAccountServiceResponse response = CreateAccountServiceResponse
+          .newBuilder()
+          .setSuccess(success)
+          .build();
+
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void saveTransfer(SaveTransferRequest request,
+        io.grpc.stub.StreamObserver<SaveTransferResponse> responseObserver) {
+
+      String source = String.valueOf(request.getSourceCpf());
+      String destiny = String.valueOf(request.getDestinationCpf());
+      double amount = request.getAmountCents() / 100.0;
+
+      // ==========================================================
+      // AQUI É A MÁGICA: Chama a SUA função que adquire os LOCKS
+      // do JGroups antes de repassar a ordem pro DataNode!
+      // ==========================================================
+      boolean success = processTransfer(source, destiny, amount);
+
+      SaveTransferResponse response = SaveTransferResponse
           .newBuilder()
           .setSuccess(success)
           .build();
@@ -188,6 +226,7 @@ public class ControlNode implements Receiver {
       responseObserver.onCompleted();
     }
 
+    /*
     @Override
     public void getTransferService(GetTransferServiceRequest request,
         io.grpc.stub.StreamObserver<GetTransferServiceResponse> responseObserver) {
@@ -196,6 +235,8 @@ public class ControlNode implements Receiver {
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     }
+    */
+
   }
 
   public static void main(String[] args) throws Exception {

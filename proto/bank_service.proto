@@ -136,11 +136,11 @@ message Transfer {
 // Consulta de transferências de um cps
 // ==============================
 
-message GetTransferServiceRequest {
+message GetAllTransferByCPFRequest {
     int64 source = 1;
 }
 
-message GetTransferServiceResponse {
+message GetAllTransferByCPFResponse {
     bool found = 1;
     repeated Transfer transfer = 2;
 }

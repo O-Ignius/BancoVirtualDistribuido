@@ -25,18 +25,28 @@ public class DataNodeClient {
     }
   }
 
-  public boolean readAccount(String accountId) {
-    ReadAccountDataRequest request = ReadAccountDataRequest.newBuilder()
-        .setAccountId(Long.parseLong(accountId))
+  public boolean verifyCredentials(String id, String password) {
+    VerifyCredentialsRequest request = VerifyCredentialsRequest.newBuilder()
+        .setId(id)
+        .setPassword(password)
+        .build();
+    VerifyCredentialsResponse response = stub.verifyCredentials(request);
+    return response.getSuccess();
+  }
+
+  public boolean readAccount(String cpf) {
+    ReadAccountRequest request = ReadAccountRequest.newBuilder()
+        .setCpf(Long.parseLong(cpf))
         .build();
     ReadAccountDataResponse response = stub.readAccountData(request);
     return response.getFound();
   }
 
-  public boolean saveAccount(String accountId, String owner, double balance) {
-    SaveAccountDataRequest request = SaveAccountDataRequest.newBuilder()
-        .setAccountId(Long.parseLong(accountId))
+  public boolean saveAccount(String cpf, String owner, String password, double balance) {
+    SaveAccountRequest request = SaveAccountRequest.newBuilder()
+        .setCpf(Long.parseLong(cpf))
         .setOwner(owner)
+        .setPassword(password)
         .setBalanceCents((long) (balance * 100))
         .build();
     SaveAccountDataResponse response = stub.saveAccountData(request);
@@ -46,8 +56,8 @@ public class DataNodeClient {
   public boolean saveTransfer(String transferId, String sourceId, String destinyId, double amount) {
     SaveTransferDataRequest request = SaveTransferDataRequest.newBuilder()
         .setTransferId(transferId)
-        .setSourceAccountId(Long.parseLong(sourceId))
-        .setDestinationAccountId(Long.parseLong(destinyId))
+        .setSourceCpf(Long.parseLong(sourceId))
+        .setDestinationCpf(Long.parseLong(destinyId))
         .setAmountCents((long) (amount * 100))
         .build();
     SaveTransferDataResponse response = stub.saveTransferData(request);
@@ -56,10 +66,10 @@ public class DataNodeClient {
 
   public boolean executeDebitAndCredit(String idSource, String idDestiny, double amount) {
     // busca saldo das contas
-    ReadAccountDataResponse sourceResponse = stub.readAccountData(ReadAccountDataRequest.newBuilder()
-        .setAccountId(Long.parseLong(idSource)).build());
-    ReadAccountDataResponse destinyResponse = stub.readAccountData(ReadAccountDataRequest.newBuilder()
-        .setAccountId(Long.parseLong(idDestiny)).build());
+    ReadAccountResponse sourceResponse = stub.readAccount(ReadAccountRequest.newBuilder()
+        .setCpf(Long.parseLong(idSource)).build());
+    ReadAccountResponse destinyResponse = stub.readAccount(ReadAccountRequest.newBuilder()
+        .setCpf(Long.parseLong(idDestiny)).build());
 
     if (!sourceResponse.getFound() || !destinyResponse.getFound()) {
       return false;
@@ -73,16 +83,16 @@ public class DataNodeClient {
     }
 
     // atualiza origem
-    SaveAccountDataRequest saveSource = SaveAccountDataRequest.newBuilder()
-        .setAccountId(sourceResponse.getAccountId())
+    SaveAccountRequest saveSource = SaveAccountRequest.newBuilder()
+        .setCpf(sourceResponse.getCpf())
         .setOwner(sourceResponse.getOwner())
         .setBalanceCents(sourceResponse.getBalanceCents() - amountCents)
         .build();
     boolean sourceSuccess = stub.saveAccountData(saveSource).getSuccess();
 
     // atualiza destino
-    SaveAccountDataRequest saveDestiny = SaveAccountDataRequest.newBuilder()
-        .setAccountId(destinyResponse.getAccountId())
+    SaveAccountRequest saveDestiny = SaveAccountRequest.newBuilder()
+        .setCpf(destinyResponse.getCpf())
         .setOwner(destinyResponse.getOwner())
         .setBalanceCents(destinyResponse.getBalanceCents() + amountCents)
         .build();

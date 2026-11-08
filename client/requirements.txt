@@ -1,0 +1,14 @@
+# Dependências do cliente Python (gRPC)
+# Instalar com: pip install -r requirements.txt
+
+# Runtime gRPC usado pelo Client.py
+grpcio>=1.68.1
+
+# Gerador dos stubs Python a partir dos .proto (usado pelo compileCliente.sh)
+grpcio-tools>=1.68.1
+
+# Runtime das mensagens Protocol Buffers geradas
+protobuf>=5.26.1
+
+# Servidor web da interface (front-end em HTML)
+flask>=3.0

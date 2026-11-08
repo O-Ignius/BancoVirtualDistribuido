@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar · Banco Virtual{% endblock %}
+{% block conteudo %}
+<section class="cartao estreito">
+  <h1>Entrar</h1>
+  <form method="post">
+    <label>CPF
+      <input name="cpf" inputmode="numeric" autocomplete="username" placeholder="000.000.000-00" required autofocus>
+    </label>
+    <label>Senha
+      <input name="senha" type="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit">Entrar</button>
+  </form>
+  <p class="secundario">Não tem conta? <a href="{{ url_for('cadastro') }}">Abrir conta</a></p>
+</section>
+{% endblock %}

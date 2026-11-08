@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block titulo %}Minha conta · Banco Virtual{% endblock %}
+{% block conteudo %}
+<section class="cartao saldo">
+  <p class="secundario">Olá{% if nome %}, {{ nome }}{% endif %}</p>
+  <p class="rotulo">Saldo disponível</p>
+  <p class="valor">{{ saldo | reais if saldo is not none else '—' }}</p>
+</section>
+
+<div class="colunas">
+  <section class="cartao" id="transferir">
+    <h2>Transferir</h2>
+
+    <form method="get" action="{{ url_for('painel') }}#transferir" class="linha">
+      <input name="busca" value="{{ termo }}" placeholder="Buscar destinatário pelo nome">
+      <button type="submit" class="secundario-btn">Buscar</button>
+    </form>
+
+    {% if resultados is not none %}
+      {% if resultados %}
+        <ul class="resultados">
+          {% for r in resultados %}
+            <li>
+              <span>{{ r.nome }} <small>{{ r.cpf | cpf }}</small></span>
+              <a href="{{ url_for('painel', destino=r.cpf) }}#transferir">Selecionar</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="secundario">Nenhum cliente encontrado para “{{ termo }}”.</p>
+      {% endif %}
+    {% endif %}
+
+    <form method="post" action="{{ url_for('transferir') }}">
+      <label>CPF do destinatário
+        <input name="destino" value="{{ destino | cpf if destino }}" inputmode="numeric" placeholder="000.000.000-00" required>
+      </label>
+      {% if nome_destino %}<p class="destino">Para: <strong>{{ nome_destino }}</strong></p>{% endif %}
+      <label>Valor (R$)
+        <input name="valor" inputmode="decimal" placeholder="0,00" required>
+      </label>
+      <button type="submit">Transferir</button>
+    </form>
+  </section>
+
+  <section class="cartao">
+    <h2>Extrato</h2>
+    {% if extrato %}
+      <table class="extrato">
+        <thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th></tr></thead>
+        <tbody>
+          {% for t in extrato %}
+            {% set enviada = t.origem == cpf %}
+            <tr>
+              <td>{{ t.data.strftime('%d/%m/%Y %H:%M') }}</td>
+              <td>{{ 'Enviada para' if enviada else 'Recebida de' }} {{ (t.destino if enviada else t.origem) | cpf }}</td>
+              <td class="num {{ 'saida' if enviada else 'entrada' }}">
+                {{ (-t.valor_centavos if enviada else t.valor_centavos) | reais }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="secundario">Nenhuma movimentação ainda.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
