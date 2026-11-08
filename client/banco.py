@@ -76,6 +76,8 @@ class BancoMock:
         with self._lock:
             if origem == destino:
                 raise ErroBanco("Não é possível transferir para a própria conta.")
+            if origem not in self._contas:
+                raise ErroBanco("Conta de origem não encontrada.")
             if destino not in self._contas:
                 raise ErroBanco("Conta de destino não encontrada.")
             if valor_centavos <= 0:
@@ -127,7 +129,7 @@ class BancoMock:
 
 class BancoGrpc:
     """
-    todo: ajustar quando corrigir os .proto
+    Comunicação com o Gateway através do serviço BankService.
     """
 
     def __init__(self, host, porta):
@@ -157,7 +159,6 @@ class BancoGrpc:
             raise BancoIndisponivel(str(e.details() or e.code())) from e
 
     def criar_conta(self, nome, cpf, senha):
-        # assume cpf como string no CreateAccountServiceRequest (hoje está int64 no .proto)
         resp = self._chamar(
             self._stub.CreateAccountService,
             self._pb.CreateAccountServiceRequest(user=nome, password=senha, cpf=cpf),
@@ -178,25 +179,21 @@ class BancoGrpc:
     def nome_da_conta(self, cpf):
         return self._chamar(
             self._stub.GetAccountService,
-            self._pb.GetAccountServiceRequest(cpf=int(cpf)),
+            self._pb.GetAccountServiceRequest(cpf=cpf),
         ).owner
 
     def consultar_saldo(self, cpf):
         return self._chamar(
             self._stub.GetAccountService,
-            self._pb.GetAccountServiceRequest(cpf=int(cpf)),
+            self._pb.GetAccountServiceRequest(cpf=cpf),
         ).balance_cents
 
     def transferir(self, origem, destino, valor_centavos):
-        if not hasattr(self._pb, "SaveTransferServiceRequest"):
-            raise OperacaoNaoSuportada(
-                "Falta a mensagem SaveTransferServiceRequest no bank_service.proto."
-            )
         resp = self._chamar(
             self._stub.SaveTransferService,
             self._pb.SaveTransferServiceRequest(
-                source_cpf=int(origem),
-                destination_cpf=int(destino),
+                source_cpf=origem,
+                destination_cpf=destino,
                 amount_cents=valor_centavos,
             ),
         )
@@ -205,23 +202,19 @@ class BancoGrpc:
         return True
 
     def extrato(self, cpf):
-        if not hasattr(self._pb, "GetAllTransferByCPFServiceRequest"):
-            raise OperacaoNaoSuportada(
-                "Falta a mensagem GetAllTransferByCPFServiceRequest no bank_service.proto."
-            )
         resp = self._chamar(
-            self._stub.GetAllTransferByCPFService,
-            self._pb.GetAllTransferByCPFServiceRequest(cpf=int(cpf)),
+            self._stub.GetTransferService,
+            self._pb.GetTransferServiceRequest(source=cpf),
         )
         return [
             {
                 "id": t.transfer_id,
-                "origem": str(t.source),
-                "destino": str(t.destiny),
+                "origem": t.source,
+                "destino": t.destiny,
                 "valor_centavos": t.amount_cents,
                 "data": t.created_at.ToDatetime(),
             }
-            for t in resp.transfers
+            for t in resp.transfer
         ]
 
     def buscar_por_nome(self, termo):

@@ -14,7 +14,16 @@ import re
 import secrets
 from functools import wraps
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 from banco import BancoIndisponivel, ErroBanco, OperacaoNaoSuportada, criar_banco
 
@@ -38,7 +47,11 @@ def formatar_cpf(cpf):
 
 
 def formatar_reais(centavos):
-    reais = f"{abs(centavos) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    reais = (
+        f"{abs(centavos) / 100:,.2f}".replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
     return f"{'-' if centavos < 0 else ''}R$ {reais}"
 
 
@@ -153,7 +166,7 @@ def painel():
             if r["cpf"] != cpf_usuario_logado:
                 resultados.append(r)
 
-
+    print(banco.consultar_saldo)
     return render_template(
         "painel.html",
         cpf=cpf_usuario_logado,
@@ -189,12 +202,14 @@ def api_montante():
     m = obter_montante()
     if m is None:
         return jsonify(None)
-    return jsonify({
-        "total": formatar_reais(m["total_centavos"]),
-        "contas": m["contas"],
-        "esperado": formatar_reais(m["contas"] * 100_000),
-        "consistente": m["total_centavos"] == m["contas"] * 100_000,
-    })
+    return jsonify(
+        {
+            "total": formatar_reais(m["total_centavos"]),
+            "contas": m["contas"],
+            "esperado": formatar_reais(m["contas"] * 100_000),
+            "consistente": m["total_centavos"] == m["contas"] * 100_000,
+        }
+    )
 
 
 if __name__ == "__main__":
