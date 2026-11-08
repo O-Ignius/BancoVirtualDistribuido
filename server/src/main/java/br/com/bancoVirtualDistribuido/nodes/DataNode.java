@@ -628,7 +628,7 @@ public class DataNode implements Receiver {
     }
 
     @Override
-    public void EditAccountData(
+    public void editAccountData(
         EditAccountDataRequest request,
         StreamObserver<EditAccountDataResponse> responseObserver) {
 
