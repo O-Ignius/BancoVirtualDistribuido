@@ -906,33 +906,33 @@ public class DataNode implements Receiver {
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     }
+  }
 
-    public static void main(String[] args) throws Exception {
+  public static void main(String[] args) throws Exception {
 
-      // Passa nome do nó e caminhos dos arquivos de persistência
-      String name = args.length > 0
-          ? args[0]
-          : "DataNode{" + UUID.randomUUID().toString() + "}";
+    // Passa nome do nó e caminhos dos arquivos de persistência
+    String name = args.length > 0
+        ? args[0]
+        : "DataNode{" + UUID.randomUUID().toString() + "}";
 
-      String accountsPath = args.length > 1
-          ? args[1]
-          : Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
+    String accountsPath = args.length > 1
+        ? args[1]
+        : Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
 
-      String transfersPath = args.length > 2
-          ? args[2]
-          : Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
+    String transfersPath = args.length > 2
+        ? args[2]
+        : Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
 
-      DataNode node = new DataNode(
-          name,
-          accountsPath,
-          transfersPath);
+    DataNode node = new DataNode(
+        name,
+        accountsPath,
+        transfersPath);
 
-      node.start();
+    node.start();
 
-      Runtime.getRuntime().addShutdownHook(
-          new Thread(node::stop));
+    Runtime.getRuntime().addShutdownHook(
+        new Thread(node::stop));
 
-      Thread.currentThread().join();
-    }
+    Thread.currentThread().join();
   }
 }
