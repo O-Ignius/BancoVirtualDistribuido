@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package bank.data;
 
-option java_package = "br.com.bancoVirtualDistribuido.grpc";
+option java_package = "br.com.bancoVirtualDistribuido.grpc.data";
 option java_multiple_files = true;
 option java_outer_classname = "BankDataProto";
 
@@ -12,44 +12,44 @@ import "google/protobuf/timestamp.proto";
 service BankDataService {
 //----------Conta
   //tenta login
-    rpc VerifyCredentials(VerifyCredentialsRequest)
-        returns (VerifyCredentialsResponse);
+    rpc VerifyCredentialsData(VerifyCredentialsDataRequest)
+        returns (VerifyCredentialsDataResponse);
 
   //le uma conta
-    rpc ReadAccount(ReadAccountRequest)
-        returns (ReadAccountResponse);
+    rpc ReadAccountData(ReadAccountDataRequest)
+        returns (ReadAccountDataResponse);
 
     //edita conta já existente
-    rpc EditAccount(EditAccountRequest)
-        returns (EditAccountResponse);
+    rpc EditAccountData(EditAccountDataRequest)
+        returns (EditAccountDataResponse);
 
 
     //exclui conta já existente
-    rpc DeleteAccount(DeleteAccountRequest)
-        returns (DeleteAccountResponse);
+    rpc DeleteAccountData(DeleteAccountDataRequest)
+        returns (DeleteAccountDataResponse);
 
     // persiste uma conta
-    rpc SaveAccount(SaveAccountRequest)
-        returns (SaveAccountResponse);
+    rpc SaveAccountData(SaveAccountDataRequest)
+        returns (SaveAccountDataResponse);
 
 //----------Conta
 //
 //----------transferência
     //recupera transferencias de um dado cpf
-    rpc ReadAllTransferByCPF(ReadAllTransferByCPFRequest)
-        returns (ReadAllTransferByCPFResponse);
+    rpc GetTransferData(GetTransferDataRequest)
+        returns (GetTransferDataResponse);
 
     //lê todas as transferencias entre 2 cpfs
-    rpc ReadAllTransferBetweenCPFs(ReadAllTransferBetweenCPFsRequest)
-        returns (ReadAllTransferBetweenCPFsResponse);
+    rpc ReadAllTransferBetweenCPFsData(ReadAllTransferBetweenCPFsDataRequest)
+        returns (ReadAllTransferBetweenCPFsDataResponse);
 
     //lê todas entre 2 datas 
-    rpc ReadAllTransferBetweenDate(ReadAllTransferBetweenDateRequest)
-        returns (ReadAllTransferBetweenDateResponse);
+    rpc ReadAllTransferBetweenDateData(ReadAllTransferBetweenDateDataRequest)
+        returns (ReadAllTransferBetweenDateDataResponse);
 
     // persiste uma transferência.
-    rpc SaveTransfer(SaveTransferRequest)
-        returns (SaveTransferResponse);
+    rpc SaveTransferData(SaveTransferDataRequest)
+        returns (SaveTransferDataResponse);
 //----------transferência
 }
 
@@ -57,12 +57,12 @@ service BankDataService {
 // verifica credencias
 // ==============================
 
-message VerifyCredentialsRequest {
+message VerifyCredentialsDataRequest {
     string id = 1;
     string password = 2;
 }
 
-message VerifyCredentialsResponse {
+message VerifyCredentialsDataResponse {
     bool success = 1;
 }
 
@@ -71,11 +71,11 @@ message VerifyCredentialsResponse {
 // Consulta de conta
 // ==============================
 
-message ReadAccountRequest {
+message ReadAccountDataRequest {
     int64 cpf = 1;
 }
 
-message ReadAccountResponse {
+message ReadAccountDataResponse {
     bool found = 1;
     int64 cpf = 2;
     string owner = 3;
@@ -85,24 +85,24 @@ message ReadAccountResponse {
 // ==============================
 // Edição de conta
 // ==============================
-message EditAccountRequest {
+message EditAccountDataRequest {
     int64 cpf = 1;
     string owner = 2;
     string password = 3;
 }
 
-message EditAccountResponse {
+message EditAccountDataResponse {
     bool success = 1;
 }
 
 // ==============================
 // Exclusão de conta
 // ==============================
-message DeleteAccountRequest {
+message DeleteAccountDataRequest {
     int64 cpf = 1;
 }
 
-message DeleteAccountResponse {
+message DeleteAccountDataResponse {
     bool success = 1;
 }
 
@@ -110,14 +110,14 @@ message DeleteAccountResponse {
 // Persistência de conta
 // ==============================
 
-message SaveAccountRequest {
+message SaveAccountDataRequest {
     int64 cpf = 1;
     string owner = 2;
     string password = 3;
     int64 balance_cents = 4;
 }
 
-message SaveAccountResponse {
+message SaveAccountDataResponse {
     bool success = 1;
 }
 
@@ -136,25 +136,25 @@ message Transfer {
 // consulta todas transferencias de um cpf
 // ==============================
 
-message ReadAllTransferByCPFRequest {
+message GetTransferDataRequest {
     int64 cpf = 1;
 }
 
-message ReadAllTransferByCPFResponse {
+message GetTransferDataResponse {
     bool found = 1;
-    repeated Transfer transfer;
+    repeated Transfer transfer = 2;
 }
 
 // ==============================
 // Consulta de transferência entre 2 cpfs
 // ==============================
 
-message ReadAllTransferBetweenCPFsRequest {
+message ReadAllTransferBetweenCPFsDataRequest {
     int64 source = 1;
     int64 destiny = 2;
 }
 
-message ReadAllTransferBetweenCPFsResponse {
+message ReadAllTransferBetweenCPFsDataResponse {
     bool found = 1;
     repeated Transfer transfer = 2;
 }
@@ -164,12 +164,12 @@ message ReadAllTransferBetweenCPFsResponse {
 // consulta de transferencias entre 2 datas
 // ==============================
 
-message ReadAllTransferBetweenDateRequest {
+message ReadAllTransferBetweenDateDataRequest {
     google.protobuf.Timestamp start = 1;
     google.protobuf.Timestamp end = 2;
 }
 
-message ReadAllTransferBetweenDateResponse {
+message ReadAllTransferBetweenDateDataResponse {
     bool found = 1;
     repeated Transfer transfer = 2;
 }
@@ -178,13 +178,13 @@ message ReadAllTransferBetweenDateResponse {
 // Persistência de transferência
 // ==============================
 
-message SaveTransferRequest {
+message SaveTransferDataRequest {
     string transfer_id = 1;
     int64 source_cpf = 2;
     int64 destination_cpf = 3;
     int64 amount_cents = 4;
 }
 
-message SaveTransferResponse {
+message SaveTransferDataResponse {
     bool success = 1;
 }

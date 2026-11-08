@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package bank.service;
 
-option java_package = "br.com.bancoVirtualDistribuido.grpc";
+option java_package = "br.com.bancoVirtualDistribuido.grpc.service";
 option java_multiple_files = true;
 option java_outer_classname = "BankServiceProto";
 
@@ -13,38 +13,38 @@ service BankService {
 
   // -------Contas
 
-    rpc Login(LoginRequest)
-        returns (LoginResponse);
+    rpc LoginService(LoginServiceRequest)
+        returns (LoginServiceResponse);
     // Consulta uma conta bancária.
-    rpc GetAccount(GetAccountRequest)
-        returns (GetAccountResponse);
+    rpc GetAccountService(GetAccountServiceRequest)
+        returns (GetAccountServiceResponse);
 
-    rpc createAccount(CreateAccountRequest)
-        returns (CreateAccountResponse);
+    rpc createAccountService(CreateAccountServiceRequest)
+        returns (CreateAccountServiceResponse);
 
-    rpc EditAccount(EditAccountRequest)
-        returns (EditAccountResponse);
+    rpc EditAccountService(EditAccountServiceRequest)
+        returns (EditAccountServiceResponse);
 
-    rpc DeleteAccount(DeleteAccountRequest)
-        returns (DeleteAccountResponse);
+    rpc DeleteAccountService(DeleteAccountServiceRequest)
+        returns (DeleteAccountServiceResponse);
   // -------Contas
 
   // -------Transferencias
     //recupera transferencias de um dado cpf
-    rpc GetAllTransferByCPF(GetAllTransferByCPFRequest)
-        returns (GetAllTransferByCPFResponse);
+    rpc GetTransferService(GetTransferServiceRequest)
+        returns (GetTransferServiceResponse);
 
     //lê todas as transferencias entre 2 cpfs
-    rpc GetAllTransferBetweenCPFs(GetAllTransferBetweenCPFsRequest)
-        returns (GetAllTransferBetweenCPFsResponse);
+    rpc GetAllTransfersBetweenCPFsService(GetAllTransfersBetweenCPFsServiceRequest)
+        returns (GetAllTransfersBetweenCPFsServiceResponse);
 
     //lê todas entre 2 datas 
-    rpc GetAllTransferBetweenDate(GetAllTransferBetweenDateRequest)
-        returns (GetAllTransferBetweenDateResponse);
+    rpc GetAllTransfersBetweenDateService(GetAllTransfersBetweenDateServiceRequest)
+        returns (GetAllTransfersBetweenDateServiceResponse);
 
     // persiste uma transferência.
-    rpc SaveTransfer(SaveTransferRequest)
-        returns (SaveTransferResponse);
+    rpc SaveTransferService(SaveTransferServiceRequest)
+        returns (SaveTransferServiceResponse);
 
   // -------Transferencias
 }
@@ -58,12 +58,12 @@ service BankService {
 // ==============================
 // tenta logar
 // ==============================
-message LoginRequest {
+message LoginServiceRequest {
     string id = 1;
     string password = 2;
 }
 
-message LoginResponse {
+message LoginServiceResponse {
     bool success = 1;
 }
 
@@ -71,11 +71,11 @@ message LoginResponse {
 // Consulta de conta
 // ==============================
 
-message GetAccountRequest {
+message GetAccountServiceRequest {
     int64 cpf = 1;
 }
 
-message GetAccountResponse {
+message GetAccountServiceResponse {
     int64 cpf = 1;
     string owner = 2;
     int64 balance_cents = 3;
@@ -85,12 +85,12 @@ message GetAccountResponse {
 // cria conta
 // ==============================
 
-message CreateAccountRequest {
+message CreateAccountServiceRequest {
     string user = 1;
     string password = 2;
     int64 cpf = 3;
 }
-message CreateAccountResponse {
+message CreateAccountServiceResponse {
     bool success = 1;
 }
 
@@ -98,12 +98,12 @@ message CreateAccountResponse {
 // edita conta
 // ==============================
 
-message EditAccountRequest {
+message EditAccountServiceRequest {
     string user = 1;
     string password = 2;
     int64 cpf = 3;
 }
-message EditAccountResponse {
+message EditAccountServiceResponse {
     bool success = 1;
 }
 
@@ -111,10 +111,10 @@ message EditAccountResponse {
 // deleta conta
 // ==============================
 
-message DeleteAccountRequest {
+message DeleteAccountServiceRequest {
     string id = 1;
 }
-message DeleteAccountResponse {
+message DeleteAccountServiceResponse {
     bool success = 1;
 }
 
@@ -136,11 +136,11 @@ message Transfer {
 // Consulta de transferências de um cps
 // ==============================
 
-message GetTransfersByCPFRequest {
+message GetTransferServiceRequest {
     int64 source = 1;
 }
 
-message GetTransferByCPFResponse {
+message GetTransferServiceResponse {
     bool found = 1;
     repeated Transfer transfer = 2;
 }
@@ -149,12 +149,12 @@ message GetTransferByCPFResponse {
 // Consulta de transferência entre 2 cpfs
 // ==============================
 
-message GetAllTransferBetweenCPFsRequest {
+message GetAllTransfersBetweenCPFsServiceRequest {
     int64 source = 1;
     int64 destiny = 2;
 }
 
-message GetAllTransferBetweenCPFsResponse {
+message GetAllTransfersBetweenCPFsServiceResponse {
     bool found = 1;
     repeated Transfer transfer = 2;
 }
@@ -164,27 +164,27 @@ message GetAllTransferBetweenCPFsResponse {
 // consulta de transferencias entre 2 datas
 // ==============================
 
-message GetAllTransferBetweenDateRequest {
+message GetAllTransfersBetweenDateServiceRequest {
     google.protobuf.Timestamp start = 1;
     google.protobuf.Timestamp end = 2;
 }
 
-message GetAllTransferBetweenDateResponse {
+message GetAllTransfersBetweenDateServiceResponse {
     bool found = 1;
-    repeated Transfer transfer;
+    repeated Transfer transfer = 2;
 }
 
 // ==============================
 // Persistência de transferência
 // ==============================
 
-message SaveTransferRequest {
+message SaveTransferServiceRequest {
     string transfer_id = 1;
     int64 source_cpf = 2;
     int64 destination_cpf = 3;
     int64 amount_cents = 4;
 }
 
-message SaveTransferResponse {
+message SaveTransferServiceResponse {
     bool success = 1;
 }
