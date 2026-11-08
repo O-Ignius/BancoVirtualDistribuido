@@ -19,7 +19,7 @@ service BankService {
     rpc GetAccountService(GetAccountServiceRequest)
         returns (GetAccountServiceResponse);
 
-    rpc createAccountService(CreateAccountServiceRequest)
+    rpc CreateAccountService(CreateAccountServiceRequest)
         returns (CreateAccountServiceResponse);
 
     rpc EditAccountService(EditAccountServiceRequest)

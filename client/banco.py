@@ -159,7 +159,7 @@ class BancoGrpc:
     def criar_conta(self, nome, cpf, senha):
         # assume cpf como string no CreateAccountServiceRequest (hoje está int64 no .proto)
         resp = self._chamar(
-            self._stub.createAccountService,
+            self._stub.CreateAccountService,
             self._pb.CreateAccountServiceRequest(user=nome, password=senha, cpf=cpf),
         )
         if not resp.success:
@@ -170,20 +170,20 @@ class BancoGrpc:
 
     def login(self, cpf, senha):
         resp = self._chamar(
-            self._stub.loginService,
+            self._stub.LoginService,
             self._pb.LoginServiceRequest(id=cpf, password=senha),
         )
         return resp.success
 
     def nome_da_conta(self, cpf):
         return self._chamar(
-            self._stub.getAccountService,
+            self._stub.GetAccountService,
             self._pb.GetAccountServiceRequest(cpf=int(cpf)),
         ).owner
 
     def consultar_saldo(self, cpf):
         return self._chamar(
-            self._stub.getAccountService,
+            self._stub.GetAccountService,
             self._pb.GetAccountServiceRequest(cpf=int(cpf)),
         ).balance_cents
 
@@ -193,7 +193,7 @@ class BancoGrpc:
                 "Falta a mensagem SaveTransferServiceRequest no bank_service.proto."
             )
         resp = self._chamar(
-            self._stub.saveTransferService,
+            self._stub.SaveTransferService,
             self._pb.SaveTransferServiceRequest(
                 source_cpf=int(origem),
                 destination_cpf=int(destino),
@@ -210,7 +210,7 @@ class BancoGrpc:
                 "Falta a mensagem GetAllTransferByCPFServiceRequest no bank_service.proto."
             )
         resp = self._chamar(
-            self._stub.getAllTransferByCPFService,
+            self._stub.GetAllTransferByCPFService,
             self._pb.GetAllTransferByCPFServiceRequest(cpf=int(cpf)),
         )
         return [
