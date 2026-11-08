@@ -12,21 +12,21 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
     this.controlStub = controlStub;
   }
 
-  // @Override
-  // public void loginService(LoginServiceRequest request,
-  // StreamObserver<LoginServiceResponse> responseObserver) {
-  // try {
-  // LoginServiceResponse response = controlStub.loginService(request);
-  // responseObserver.onNext(response);
-  // responseObserver.onCompleted();
-  // } catch (Exception e) {
-  // System.err.println("[Gateway] Erro ao conectar com Controle: " +
-  // e.getMessage());
-  // responseObserver.onError(io.grpc.Status.UNAVAILABLE
-  // .withDescription("Serviço de Controle indisponível.")
-  // .asRuntimeException());
-  // }
-  // }
+  @Override
+  public void loginService(LoginServiceRequest request,
+      StreamObserver<LoginServiceResponse> responseObserver) {
+    try {
+      LoginServiceResponse response = controlStub.loginService(request);
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    } catch (Exception e) {
+      System.err.println("[Gateway] Erro ao conectar com Controle: " +
+          e.getMessage());
+      responseObserver.onError(io.grpc.Status.UNAVAILABLE
+          .withDescription("Serviço de Controle indisponível.")
+          .asRuntimeException());
+    }
+  }
 
   @Override
   public void getAccountService(GetAccountServiceRequest request,
@@ -62,27 +62,22 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
     }
   }
 
-  /*
-   * @Override
-   * public void getTransferService(GetTransferServiceRequest request,
-   * StreamObserver<GetTransferServiceResponse> responseObserver) {
-   * System.out.
-   * println("[Gateway] Pedido GetTransferService recebido. Repassando ao Controle..."
-   * );
-   * try {
-   * GetTransferServiceResponse response =
-   * controlStub.getTransferService(request);
-   * responseObserver.onNext(response);
-   * responseObserver.onCompleted();
-   * } catch (Exception e) {
-   * System.err.println("[Gateway] Erro ao conectar com Controle: " +
-   * e.getMessage());
-   * responseObserver.onError(io.grpc.Status.UNAVAILABLE
-   * .withDescription("Serviço de Controle indisponível.")
-   * .asRuntimeException());
-   * }
-   * }
-   */
+  @Override
+  public void getTransferService(GetTransferServiceRequest request,
+      StreamObserver<GetTransferServiceResponse> responseObserver) {
+    System.out.println("[Gateway] Pedido GetTransferService recebido. Repassando ao Controle...");
+    try {
+      GetTransferServiceResponse response = controlStub.getTransferService(request);
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    } catch (Exception e) {
+      System.err.println("[Gateway] Erro ao conectar com Controle: " +
+          e.getMessage());
+      responseObserver.onError(io.grpc.Status.UNAVAILABLE
+          .withDescription("Serviço de Controle indisponível.")
+          .asRuntimeException());
+    }
+  }
 
   @Override
   public void createAccountService(CreateAccountServiceRequest request,

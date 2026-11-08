@@ -46,15 +46,23 @@ public class DataNodeClient {
 
   // ---------- Leitura de conta ----------
 
-  public boolean readAccountData(String cpf) {
+  public ReadAccountDataResponse readAccountData(String cpf) {
 
     ReadAccountDataRequest request = ReadAccountDataRequest.newBuilder()
         .setCpf(cpf)
         .build();
 
-    ReadAccountDataResponse response = stub.readAccountData(request);
+    return stub.readAccountData(request);
+  }
 
-    return response.getFound();
+  // ---------- Leitura de transferencias ----------
+  public GetTransferDataResponse readTransferData(String cpf) {
+
+    GetTransferDataRequest request = GetTransferDataRequest.newBuilder()
+        .setCpf(cpf)
+        .build();
+
+    return stub.getTransferData(request);
   }
 
   // ---------- Salvamento de conta ----------

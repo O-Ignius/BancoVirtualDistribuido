@@ -219,28 +219,77 @@ public class ControlNode implements Receiver {
     public void getAccountService(GetAccountServiceRequest request,
         io.grpc.stub.StreamObserver<GetAccountServiceResponse> responseObserver) {
 
-      // Implementação futura: dataClient.readAccountData(...)
+      try {
+        // 1. Pega cpf
+        String cpf = request.getCpf();
+        System.out.println("[ControlNode] Buscando dados da conta: " + cpf);
 
-      GetAccountServiceResponse response = GetAccountServiceResponse.newBuilder()
-          .build();
+        // 2. Pede pro datanode passando a String DIRETO (resolve o Erro 1)
+        ReadAccountDataResponse dataResponse = dataClient.readAccountData(cpf);
 
-      responseObserver.onNext(response);
-      responseObserver.onCompleted();
+        // 3. Monta a resposta
+        GetAccountServiceResponse response = GetAccountServiceResponse.newBuilder()
+            .setCpf(dataResponse.getCpf())
+            .setOwner(dataResponse.getOwner())
+            .setBalanceCents(dataResponse.getBalanceCents())
+            .build();
+
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+
+      } catch (Exception e) {
+        System.err.println("[ControlNode] Erro ao buscar conta no DataNode: " + e.getMessage());
+
+        GetAccountServiceResponse errorResponse = GetAccountServiceResponse.newBuilder()
+            .build();
+
+        responseObserver.onNext(errorResponse);
+        responseObserver.onCompleted();
+      }
     }
 
-    /*
-     * @Override
-     * public void getTransferService(GetTransferServiceRequest request,
-     * io.grpc.stub.StreamObserver<GetTransferServiceResponse> responseObserver) {
-     * 
-     * GetTransferServiceResponse response =
-     * GetTransferServiceResponse.newBuilder()
-     * .build();
-     * 
-     * responseObserver.onNext(response);
-     * responseObserver.onCompleted();
-     * }
-     */
+    @Override
+    public void getTransferService(GetTransferServiceRequest request,
+        io.grpc.stub.StreamObserver<GetTransferServiceResponse> responseObserver) {
+
+      try {
+        String cpf = request.getSource();
+        System.out.println("[ControlNode] Buscando extrato de transferências para: " + cpf);
+
+        GetTransferDataResponse dataResponse = dataClient.readTransferData(cpf);
+
+        GetTransferServiceResponse.Builder responseBuilder = GetTransferServiceResponse.newBuilder()
+            .setFound(true);
+
+        // tradutor pois no rpc temos o transfer usado em data e usado em service
+        for (br.com.bancoVirtualDistribuido.grpc.data.Transfer dataTransfer : dataResponse.getTransferList()) {
+
+          br.com.bancoVirtualDistribuido.grpc.service.Transfer serviceTransfer = br.com.bancoVirtualDistribuido.grpc.service.Transfer
+              .newBuilder()
+              .setTransferId(dataTransfer.getTransferId())
+              .setSource(dataTransfer.getSource())
+              .setDestiny(dataTransfer.getDestiny())
+              .setAmountCents(dataTransfer.getAmountCents())
+              .build();
+
+          // Adiciona na lista da resposta usando o método singular gerado pelo gRPC
+          responseBuilder.addTransfer(serviceTransfer);
+        }
+
+        responseObserver.onNext(responseBuilder.build());
+        responseObserver.onCompleted();
+
+      } catch (Exception e) {
+        System.err.println("[ControlNode] Erro ao buscar transferências no DataNode: " + e.getMessage());
+
+        GetTransferServiceResponse errorResponse = GetTransferServiceResponse.newBuilder()
+            .setFound(false)
+            .build();
+
+        responseObserver.onNext(errorResponse);
+        responseObserver.onCompleted();
+      }
+    }
   }
 
   public static void main(String[] args) throws Exception {
