@@ -1,9 +1,7 @@
 package br.com.bancoVirtualDistribuido.nodes;
 
-import org.jgroups.Address;
 import org.jgroups.JChannel;
 import org.jgroups.Receiver;
-import org.jgroups.View;
 import org.jgroups.blocks.RpcDispatcher;
 import org.jgroups.blocks.locking.LockService;
 import org.jgroups.util.Util;
@@ -16,7 +14,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.UUID;
-import br.com.bancoVirtualDistribuido.nodes.DataNodeClient;
+
 import br.com.bancoVirtualDistribuido.config.Constants;
 import br.com.bancoVirtualDistribuido.grpc.data.*;
 import br.com.bancoVirtualDistribuido.grpc.service.*;
@@ -31,7 +29,7 @@ public class ControlNode implements Receiver {
   private DataNodeClient dataClient;
   private io.grpc.Server grpcServer;
 
-  // cliente online
+  // Cliente online
   private final Set<String> loggedClients = new HashSet<>();
 
   public ControlNode(String nodeName) {
@@ -49,23 +47,22 @@ public class ControlNode implements Receiver {
 
     channel.connect("ControlChannel");
 
-    // pega estado do coordenador
+    // Pega estado do coordenador
     channel.getState(null, 10000);
 
-    // conecta ao serviidor de dados
+    // Conecta ao servidor de dados
     dataClient = new DataNodeClient();
 
     System.out.println("[" + nodeName + "] Conectado ao canal de Controle.");
 
-    // abre conexao para Gateway
-    dataClient = new DataNodeClient();
-
+    // Abre conexão para Gateway
     grpcServer = io.grpc.ServerBuilder.forPort(Constants.CONTROL_NODE_PORT)
         .addService(new ControlNodeGrpcServiceImpl())
         .build()
         .start();
 
-    System.out.println("[" + nodeName + "] Servidor gRPC escutando o Gateway na porta " + Constants.CONTROL_NODE_PORT);
+    System.out.println("[" + nodeName + "] Servidor gRPC escutando o Gateway na porta "
+        + Constants.CONTROL_NODE_PORT);
   }
 
   @Override
@@ -79,34 +76,26 @@ public class ControlNode implements Receiver {
   @SuppressWarnings("unchecked")
   public void setState(InputStream input) throws Exception {
     Set<String> sincronizedState = (Set<String>) Util.objectFromStream(new DataInputStream(input));
+
     synchronized (loggedClients) {
       loggedClients.clear();
       loggedClients.addAll(sincronizedState);
     }
+
     System.out.println("[" + nodeName + "] Estado de clientes logados sincronizado.");
   }
 
-  // @Override
-  // public void viewAccepted(View view) {
-  // System.out.println("[" + nodeName + "] Nova visão do grupo: " + view);
-  //
-  // Address atualCoordinator = view.getMembers().get(0);
-  //
-  // if (atualCoordinator.equals(channel.getAddress())) {
-  // System.out.println("[" + nodeName + "] Eu sou o COORDENador da camada de
-  // Controle.");
-  // }
-  // }
-
   // ---------- RPC ------------
 
-  public boolean login(String idCliente, String password) {
-    if (!dataClient.verifyCredentials(idCliente, password)) {
+  public boolean loginService(String idCliente, String password) {
+    if (!dataClient.verifyCredentialsData(idCliente, password)) {
       return false;
     }
+
     synchronized (loggedClients) {
       loggedClients.add(idCliente);
     }
+
     return true;
   }
 
@@ -119,23 +108,29 @@ public class ControlNode implements Receiver {
 
     l1.lock();
     l2.lock();
+
     try {
       System.out.printf("[%s] Locks adquiridos. Processando R$%.2f de %s para %s%n",
           nodeName, amount, idSource, idDestiny);
 
-      // abstracao grpc
-      boolean success = dataClient.executeDebitAndCreditData(idSource, idDestiny, amount);
+      // Comunicação com o DataNode
+      boolean success = dataClient.executeDebitAndCreditData(
+          idSource, idDestiny, amount);
 
       if (success) {
-        // salva no no de dados
+        // Salva transferência no DataNode
         String transferId = UUID.randomUUID().toString();
-        dataClient.saveTransferData(transferId, idSource, idDestiny, amount);
+
+        dataClient.saveTransferData(
+            transferId, idSource, idDestiny, amount);
       }
 
       return success;
+
     } catch (Exception e) {
       e.printStackTrace();
       return false;
+
     } finally {
       l2.unlock();
       l1.unlock();
@@ -144,45 +139,32 @@ public class ControlNode implements Receiver {
 
   public void stop() {
     if (grpcServer != null) {
-      grpcServer.shutdown(); // Desliga o servidor que atende o Gateway
+      grpcServer.shutdown();
     }
-    // fecha conexao com servidor de dadps
+
+    // Fecha conexão com servidor de dados
     if (dataClient != null) {
       dataClient.shutdown();
     }
+
     if (channel != null) {
       channel.close();
     }
   }
 
-  // - ---------------------------tradutor grpc
+  // ---------- Tradutor gRPC ----------
+
   private class ControlNodeGrpcServiceImpl
       extends BankServiceGrpc.BankServiceImplBase {
 
     @Override
-    public void login(LoginRequest request,
-        io.grpc.stub.StreamObserver<LoginResponse> responseObserver) {
-      boolean success = ControlNode.this.login(request.getId(), request.getPassword());
-      LoginResponse response = LoginResponse.newBuilder()
-          .setSuccess(success)
-          .build();
-      responseObserver.onNext(response);
-      responseObserver.onCompleted();
-    }
+    public void loginService(LoginServiceRequest request,
+        io.grpc.stub.StreamObserver<LoginServiceResponse> responseObserver) {
 
-    @Override
-    public void createAccount(CreateAccountRequest request,
-        io.grpc.stub.StreamObserver<CreateAccountResponse> responseObserver) {
+      boolean success = ControlNode.this.loginService(
+          request.getId(), request.getPassword());
 
-      System.out.println("[" + nodeName + "] Processando criação de conta para: " + request.getUser());
-
-      // O Controle pede para o DataNode salvar a conta (usando o CPF como ID e saldo
-      // inicial zero)
-      boolean success = dataClient.saveAccount(
-          String.valueOf(request.getCpf()), request.getUser(), request.getPassword(), 1000.0);
-
-      CreateAccountServiceResponse response = CreateAccountServiceResponse
-          .newBuilder()
+      LoginServiceResponse response = LoginServiceResponse.newBuilder()
           .setSuccess(success)
           .build();
 
@@ -191,21 +173,39 @@ public class ControlNode implements Receiver {
     }
 
     @Override
-    public void saveTransfer(SaveTransferRequest request,
-        io.grpc.stub.StreamObserver<SaveTransferResponse> responseObserver) {
+    public void createAccountService(CreateAccountServiceRequest request,
+        io.grpc.stub.StreamObserver<CreateAccountServiceResponse> responseObserver) {
 
-      String source = String.valueOf(request.getSourceCpf());
-      String destiny = String.valueOf(request.getDestinationCpf());
+      System.out.println("[" + nodeName
+          + "] Processando criação de conta para: " + request.getUser());
+
+      // O Controle solicita ao DataNode o salvamento da conta
+      boolean success = dataClient.saveAccountData(
+          request.getCpf(),
+          request.getUser(),
+          request.getPassword(),
+          Constants.inititalBalance);
+
+      CreateAccountServiceResponse response = CreateAccountServiceResponse.newBuilder()
+          .setSuccess(success)
+          .build();
+
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    }
+
+    @Override
+    public void saveTransferService(SaveTransferServiceRequest request,
+        io.grpc.stub.StreamObserver<SaveTransferServiceResponse> responseObserver) {
+
+      String source = request.getSourceCpf();
+      String destiny = request.getDestinationCpf();
       double amount = request.getAmountCents() / 100.0;
 
-      // ==========================================================
-      // AQUI É A MÁGICA: Chama a SUA função que adquire os LOCKS
-      // do JGroups antes de repassar a ordem pro DataNode!
-      // ==========================================================
+      // Processa transferência adquirindo os LOCKS do JGroups
       boolean success = processTransfer(source, destiny, amount);
 
-      SaveTransferResponse response = SaveTransferResponse
-          .newBuilder()
+      SaveTransferServiceResponse response = SaveTransferServiceResponse.newBuilder()
           .setSuccess(success)
           .build();
 
@@ -213,38 +213,46 @@ public class ControlNode implements Receiver {
       responseObserver.onCompleted();
     }
 
-    // Métodos de Get (Leitura) - Implementação básica para o compilador não
-    // reclamar
+    // ---------- Métodos de leitura ----------
+
     @Override
     public void getAccountService(GetAccountServiceRequest request,
         io.grpc.stub.StreamObserver<GetAccountServiceResponse> responseObserver) {
-      // Por enquanto retorna vazio, se quiser buscar saldo depois, chama o
-      // dataClient.readAccountData
-      GetAccountServiceResponse response = GetAccountServiceResponse
-          .newBuilder().build();
+
+      // Implementação futura: dataClient.readAccountData(...)
+
+      GetAccountServiceResponse response = GetAccountServiceResponse.newBuilder()
+          .build();
+
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     }
 
     /*
-    @Override
-    public void getTransferService(GetTransferServiceRequest request,
-        io.grpc.stub.StreamObserver<GetTransferServiceResponse> responseObserver) {
-      GetTransferServiceResponse response = GetTransferServiceResponse
-          .newBuilder().build();
-      responseObserver.onNext(response);
-      responseObserver.onCompleted();
-    }
-    */
-
+     * @Override
+     * public void getTransferService(GetTransferServiceRequest request,
+     * io.grpc.stub.StreamObserver<GetTransferServiceResponse> responseObserver) {
+     * 
+     * GetTransferServiceResponse response =
+     * GetTransferServiceResponse.newBuilder()
+     * .build();
+     * 
+     * responseObserver.onNext(response);
+     * responseObserver.onCompleted();
+     * }
+     */
   }
 
   public static void main(String[] args) throws Exception {
-    String name = args.length > 0 ? args[0] : "ControlNode{" + UUID.randomUUID().toString() + "}";
+    String name = args.length > 0
+        ? args[0]
+        : "ControlNode{" + UUID.randomUUID().toString() + "}";
+
     ControlNode node = new ControlNode(name);
     node.start();
 
     Runtime.getRuntime().addShutdownHook(new Thread(node::stop));
+
     Thread.currentThread().join();
   }
 }

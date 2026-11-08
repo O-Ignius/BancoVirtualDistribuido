@@ -16,8 +16,10 @@ def run():
 
         servidor = bank_service_pb2_grpc.BankServiceStub(channel)
 
-        resposta = servidor.createAccount(
-            bank_service_pb2.CreateAccountRequest(user=USER, passw=PASSWORD, cpf=CPF)
+        resposta = servidor.createAccountService(
+            bank_service_pb2.CreateAccountServiceRequest(
+                user=USER, password=PASSWORD, cpf=CPF
+            )
         )
 
         if resposta.success:
