@@ -12,7 +12,7 @@ import threading
 import uuid
 from datetime import datetime
 
-#Valores monetários são sempre inteiros em centavos.
+# Valores monetários são sempre inteiros em centavos.
 SALDO_INICIAL_CENTAVOS = 100_000  # R$ 1.000,00
 
 
@@ -47,9 +47,15 @@ class BancoMock:
         with self._lock:
             if cpf in self._contas:
                 raise ErroBanco("Já existe uma conta com este CPF.")
-            if any(c["nome"].casefold() == nome.casefold() for c in self._contas.values()):
+            if any(
+                c["nome"].casefold() == nome.casefold() for c in self._contas.values()
+            ):
                 raise ErroBanco("Já existe uma conta com este nome.")
-            self._contas[cpf] = {"nome": nome, "senha": senha, "saldo": SALDO_INICIAL_CENTAVOS}
+            self._contas[cpf] = {
+                "nome": nome,
+                "senha": senha,
+                "saldo": SALDO_INICIAL_CENTAVOS,
+            }
             return True
 
     def login(self, cpf, senha):
@@ -79,18 +85,22 @@ class BancoMock:
 
             self._contas[origem]["saldo"] -= valor_centavos
             self._contas[destino]["saldo"] += valor_centavos
-            self._transferencias.append({
-                "id": str(uuid.uuid4()),
-                "origem": origem,
-                "destino": destino,
-                "valor_centavos": valor_centavos,
-                "data": datetime.now(),
-            })
+            self._transferencias.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "origem": origem,
+                    "destino": destino,
+                    "valor_centavos": valor_centavos,
+                    "data": datetime.now(),
+                }
+            )
             return True
 
     def extrato(self, cpf):
         with self._lock:
-            itens = [t for t in self._transferencias if cpf in (t["origem"], t["destino"])]
+            itens = [
+                t for t in self._transferencias if cpf in (t["origem"], t["destino"])
+            ]
             return sorted(itens, key=lambda t: t["data"], reverse=True)
 
     def buscar_por_nome(self, termo):
@@ -147,31 +157,44 @@ class BancoGrpc:
             raise BancoIndisponivel(str(e.details() or e.code())) from e
 
     def criar_conta(self, nome, cpf, senha):
-        # assume cpf como string no CreateAccountRequest (hoje está int64 no .proto)
+        # assume cpf como string no CreateAccountServiceRequest (hoje está int64 no .proto)
         resp = self._chamar(
-            self._stub.createAccount,
-            self._pb.CreateAccountRequest(user=nome, password=senha, cpf=cpf),
+            self._stub.createAccountService,
+            self._pb.CreateAccountServiceRequest(user=nome, password=senha, cpf=cpf),
         )
         if not resp.success:
-            raise ErroBanco("Não foi possível criar a conta (CPF ou nome já cadastrado?).")
+            raise ErroBanco(
+                "Não foi possível criar a conta (CPF ou nome já cadastrado?)."
+            )
         return True
 
     def login(self, cpf, senha):
-        resp = self._chamar(self._stub.Login, self._pb.LoginRequest(id=cpf, password=senha))
+        resp = self._chamar(
+            self._stub.loginService,
+            self._pb.LoginServiceRequest(id=cpf, password=senha),
+        )
         return resp.success
 
     def nome_da_conta(self, cpf):
-        return self._chamar(self._stub.GetAccount, self._pb.GetAccountRequest(cpf=int(cpf))).owner
+        return self._chamar(
+            self._stub.getAccountService,
+            self._pb.GetAccountServiceRequest(cpf=int(cpf)),
+        ).owner
 
     def consultar_saldo(self, cpf):
-        return self._chamar(self._stub.GetAccount, self._pb.GetAccountRequest(cpf=int(cpf))).balance_cents
+        return self._chamar(
+            self._stub.getAccountService,
+            self._pb.GetAccountServiceRequest(cpf=int(cpf)),
+        ).balance_cents
 
     def transferir(self, origem, destino, valor_centavos):
-        if not hasattr(self._pb, "SaveTransferRequest"):
-            raise OperacaoNaoSuportada("Falta a mensagem SaveTransferRequest no bank_service.proto.")
+        if not hasattr(self._pb, "SaveTransferServiceRequest"):
+            raise OperacaoNaoSuportada(
+                "Falta a mensagem SaveTransferServiceRequest no bank_service.proto."
+            )
         resp = self._chamar(
-            self._stub.SaveTransfer,
-            self._pb.SaveTransferRequest(
+            self._stub.saveTransferService,
+            self._pb.SaveTransferServiceRequest(
                 source_cpf=int(origem),
                 destination_cpf=int(destino),
                 amount_cents=valor_centavos,
@@ -182,11 +205,13 @@ class BancoGrpc:
         return True
 
     def extrato(self, cpf):
-        if not hasattr(self._pb, "GetAllTransferByCPFRequest"):
-            raise OperacaoNaoSuportada("Falta a mensagem GetAllTransferByCPFRequest no bank_service.proto.")
+        if not hasattr(self._pb, "GetAllTransferByCPFServiceRequest"):
+            raise OperacaoNaoSuportada(
+                "Falta a mensagem GetAllTransferByCPFServiceRequest no bank_service.proto."
+            )
         resp = self._chamar(
-            self._stub.GetAllTransferByCPF,
-            self._pb.GetAllTransferByCPFRequest(cpf=int(cpf)),
+            self._stub.getAllTransferByCPFService,
+            self._pb.GetAllTransferByCPFServiceRequest(cpf=int(cpf)),
         )
         return [
             {
@@ -200,10 +225,14 @@ class BancoGrpc:
         ]
 
     def buscar_por_nome(self, termo):
-        raise OperacaoNaoSuportada("Falta um RPC de busca por nome no bank_service.proto.")
+        raise OperacaoNaoSuportada(
+            "Falta um RPC de busca por nome no bank_service.proto."
+        )
 
     def montante(self):
-        raise OperacaoNaoSuportada("Falta um RPC de montante total no bank_service.proto.")
+        raise OperacaoNaoSuportada(
+            "Falta um RPC de montante total no bank_service.proto."
+        )
 
 
 def criar_banco():
