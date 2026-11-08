@@ -72,12 +72,12 @@ message VerifyCredentialsDataResponse {
 // ==============================
 
 message ReadAccountDataRequest {
-    int64 cpf = 1;
+    string cpf = 1;
 }
 
 message ReadAccountDataResponse {
     bool found = 1;
-    int64 cpf = 2;
+    string cpf = 2;
     string owner = 3;
     int64 balance_cents = 4;
 }
@@ -86,7 +86,7 @@ message ReadAccountDataResponse {
 // Edição de conta
 // ==============================
 message EditAccountDataRequest {
-    int64 cpf = 1;
+    string cpf = 1;
     string owner = 2;
     string password = 3;
 }
@@ -99,7 +99,7 @@ message EditAccountDataResponse {
 // Exclusão de conta
 // ==============================
 message DeleteAccountDataRequest {
-    int64 cpf = 1;
+    string cpf = 1;
 }
 
 message DeleteAccountDataResponse {
@@ -111,7 +111,7 @@ message DeleteAccountDataResponse {
 // ==============================
 
 message SaveAccountDataRequest {
-    int64 cpf = 1;
+    string cpf = 1;
     string owner = 2;
     string password = 3;
     int64 balance_cents = 4;
@@ -126,8 +126,8 @@ message SaveAccountDataResponse {
 // ------------------------------------------------------
 message Transfer {
     string transfer_id = 1;
-    int64 source = 2;
-    int64 destiny= 3;
+    string source = 2;
+    string destiny= 3;
     int64 amount_cents = 4;
     google.protobuf.Timestamp created_at = 5;
 }
@@ -137,7 +137,7 @@ message Transfer {
 // ==============================
 
 message GetTransferDataRequest {
-    int64 cpf = 1;
+    string cpf = 1;
 }
 
 message GetTransferDataResponse {
@@ -150,8 +150,8 @@ message GetTransferDataResponse {
 // ==============================
 
 message ReadAllTransferBetweenCPFsDataRequest {
-    int64 source = 1;
-    int64 destiny = 2;
+    string source = 1;
+    string destiny = 2;
 }
 
 message ReadAllTransferBetweenCPFsDataResponse {
@@ -180,8 +180,8 @@ message ReadAllTransferBetweenDateDataResponse {
 
 message SaveTransferDataRequest {
     string transfer_id = 1;
-    int64 source_cpf = 2;
-    int64 destination_cpf = 3;
+    string source_cpf = 2;
+    string destination_cpf = 3;
     int64 amount_cents = 4;
 }
 
