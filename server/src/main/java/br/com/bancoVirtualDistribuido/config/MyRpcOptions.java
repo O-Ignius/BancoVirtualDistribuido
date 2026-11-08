@@ -37,14 +37,14 @@ public final class MyRpcOptions {
   }
 
   public static RequestOptions getAll() {
-    return new RequestOptions(ResponseMode.GET_ALL);
+    return new RequestOptions().setMode(ResponseMode.GET_ALL);
   }
 
   public static RequestOptions getFirst() {
-    return new RequestOptions(ResponseMode.GET_FIRST);
+    return new RequestOptions().setMode(ResponseMode.GET_FIRST);
   }
 
   public static RequestOptions getNone() {
-    return new RequestOptions(ResponseMode.GET_NONE);
+    return new RequestOptions().setMode(ResponseMode.GET_NONE);
   }
 }
