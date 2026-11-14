@@ -16,17 +16,14 @@ public class FrontendConnector {
   private BankServiceGrpc.BankServiceBlockingStub controlStub;
 
   public void start() throws Exception {
-    // 1. GATEWAY COMO CLIENTE (Conectando ao ControlNode na porta 50051)
-    controlNodeChannel = ManagedChannelBuilder.forAddress("localhost", Constants.CONTROL_NODE_PORT)
+    controlNodeChannel = ManagedChannelBuilder.forAddress(Constants.controlServerIp, Constants.CONTROL_NODE_PORT)
         .usePlaintext()
         .build();
 
     controlStub = BankServiceGrpc.newBlockingStub(controlNodeChannel);
     System.out.println("[Gateway] Canal aberto com o ControlNode em localhost:" + Constants.CONTROL_NODE_PORT);
 
-    // 2. GATEWAY COMO SERVIDOR (Abrindo a porta 50050 para o Python)
     gatewayServer = ServerBuilder.forPort(Constants.GATEWAY_PORT)
-        // Passamos o stub para o processador, para ele poder repassar os pedidos
         .addService(new RequestProcessor(controlStub))
         .build()
         .start();
@@ -56,7 +53,6 @@ public class FrontendConnector {
 
     Runtime.getRuntime().addShutdownHook(new Thread(gateway::stop));
 
-    // Agora acessamos o bloqueio através da instância correta
     gateway.blockUntilShutdown();
   }
 }
