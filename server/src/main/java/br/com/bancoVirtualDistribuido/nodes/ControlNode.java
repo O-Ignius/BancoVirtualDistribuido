@@ -36,7 +36,7 @@ public class ControlNode implements Receiver {
     this.nodeName = nodeName;
   }
 
-  public void start() throws Exception {
+  public void start(int nodePort) throws Exception {
     channel = new JChannel("jgroups-config.xml");
     channel.setName(nodeName);
 
@@ -56,13 +56,13 @@ public class ControlNode implements Receiver {
     System.out.println("[" + nodeName + "] Conectado ao canal de Controle.");
 
     // Abre conexão para Gateway
-    grpcServer = io.grpc.ServerBuilder.forPort(Constants.CONTROL_NODE_PORT)
+    grpcServer = io.grpc.ServerBuilder.forPort(nodePort)
         .addService(new ControlNodeGrpcServiceImpl())
         .build()
         .start();
 
     System.out.println("[" + nodeName + "] Servidor gRPC escutando o Gateway na porta "
-        + Constants.CONTROL_NODE_PORT);
+        + nodePort);
   }
 
   @Override
@@ -293,12 +293,18 @@ public class ControlNode implements Receiver {
   }
 
   public static void main(String[] args) throws Exception {
-    String name = args.length > 0
-        ? args[0]
-        : "ControlNode{" + UUID.randomUUID().toString() + "}";
+    String name = "ControlNode{" + UUID.randomUUID().toString() + "}";
+    int nodePort = Constants.CONTROL_NODE_PORT;
+
+    if (args.length > 0) {
+      name = args[0];
+      if (args.length > 1 && !args[1].isBlank()) {
+        nodePort = Integer.parseInt(args[1]);
+      }
+    }
 
     ControlNode node = new ControlNode(name);
-    node.start();
+    node.start(nodePort);
 
     Runtime.getRuntime().addShutdownHook(new Thread(node::stop));
 

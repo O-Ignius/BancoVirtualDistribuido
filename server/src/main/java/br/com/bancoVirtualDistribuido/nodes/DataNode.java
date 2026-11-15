@@ -61,7 +61,7 @@ public class DataNode implements Receiver {
     this.transferService = new TransferService(transfersDataPath);
   }
 
-  public void start() throws Exception {
+  public void start(int nodePort) throws Exception {
 
     // Tenta ler localmente os dados
     BankAccount[] localAccounts = accountService.readAll();
@@ -104,7 +104,7 @@ public class DataNode implements Receiver {
         + "] Nó de dados pronto e conectado ao canal de dados.");
 
     // Inicia gRPC para comunicar com servidor de Controle
-    grpcServer = ServerBuilder.forPort(Constants.DATA_NODE_PORT)
+    grpcServer = ServerBuilder.forPort(nodePort)
         .addService(new DataNodeGrpcServiceImpl())
         .build()
         .start();
@@ -909,26 +909,34 @@ public class DataNode implements Receiver {
   }
 
   public static void main(String[] args) throws Exception {
+    String name = "DataNode{" + UUID.randomUUID().toString() + "}";
+    String accountsPath = Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
+    String transfersPath = Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
+    int nodePort = Constants.DATA_NODE_PORT;
 
     // Passa nome do nó e caminhos dos arquivos de persistência
-    String name = args.length > 0
-        ? args[0]
-        : "DataNode{" + UUID.randomUUID().toString() + "}";
+    //
+    if (args.length > 0) {
+      name = args[0];
 
-    String accountsPath = args.length > 1
-        ? args[1]
-        : Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
+      if (args.length > 1) {
+        accountsPath = Constants.accountsDatabaseFolder + args[1];
+      }
+      if (args.length > 2) {
+        transfersPath = Constants.accountsDatabaseFolder + args[2];
+      }
+      if (args.length > 3) {
+        nodePort = Integer.parseInt(args[3]);
 
-    String transfersPath = args.length > 2
-        ? args[2]
-        : Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
+      }
+    }
 
     DataNode node = new DataNode(
         name,
         accountsPath,
         transfersPath);
 
-    node.start();
+    node.start(nodePort);
 
     Runtime.getRuntime().addShutdownHook(
         new Thread(node::stop));
