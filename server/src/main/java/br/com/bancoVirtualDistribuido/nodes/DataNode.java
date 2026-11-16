@@ -27,7 +27,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.List;
-import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.time.Instant;
 
 // grpc
@@ -43,6 +43,7 @@ public class DataNode implements Receiver {
   private String nodeName;
   private String accountDataPath;
   private String transfersDataPath;
+  private int grpcPort;
 
   private Server grpcServer;
 
@@ -51,6 +52,9 @@ public class DataNode implements Receiver {
 
   private BankAccountService accountService;
   private TransferService transferService;
+
+  // int atomico para gerenciar total de processos que nó está executando
+  private final AtomicInteger currentLoad = new AtomicInteger(0);
 
   public DataNode(String nodeName, String accountDataPath, String transfersDataPath) {
     this.nodeName = nodeName;
@@ -62,6 +66,8 @@ public class DataNode implements Receiver {
   }
 
   public void start(int nodePort) throws Exception {
+
+    this.grpcPort = nodePort;
 
     // Tenta ler localmente os dados
     BankAccount[] localAccounts = accountService.readAll();
@@ -103,17 +109,12 @@ public class DataNode implements Receiver {
     System.out.println("[" + nodeName
         + "] Nó de dados pronto e conectado ao canal de dados.");
 
-    // Inicia gRPC para comunicar com servidor de Controle
-    grpcServer = ServerBuilder.forPort(nodePort)
-        .addService(new DataNodeGrpcServiceImpl())
-        .build()
-        .start();
-
-    System.out.println("[" + nodeName
-        + "] Servidor gRPC escutando o Controle na porta "
-        + Constants.DATA_NODE_PORT);
-
     showAmount();
+  }
+
+  // retorna carga do nó
+  public int getNodeLoad() {
+    return currentLoad.get();
   }
 
   // --- Métodos de Sincronização de Estado do JGroups ---
@@ -163,53 +164,114 @@ public class DataNode implements Receiver {
     showAmount();
   }
 
+  private synchronized void startGrpcServer() {
+    if (grpcServer == null) {
+      try {
+        grpcServer = ServerBuilder.forPort(grpcPort)
+            .addService(new DataNodeGrpcServiceImpl())
+            .build()
+            .start();
+        System.out.println("[" + nodeName + "] SOU O COORDENADOR! Servidor gRPC escutando na porta " + grpcPort);
+      } catch (Exception e) {
+        System.err.println("[" + nodeName + "] Erro ao iniciar servidor gRPC: " + e.getMessage());
+      }
+    }
+  }
+
   @Override
   public void viewAccepted(View view) {
     System.out.println(
         "[" + nodeName + "] Nova visão do canal de Dados: " + view);
+
+    // verifica se é coordenador, se for, sobe server grpc para servir como proxy
+    if (!view.getMembers().isEmpty() && channel.getAddress().equals(view.getMembers().get(0))) {
+      startGrpcServer();
+    }
   }
 
   // ----------------------------- MÉTODOS INTERNOS
   // --------------------------------------
 
-  public boolean verifyCredentials(String id, String password) {
+  // seleciona nó mais livre
+  private Address getLeastLoadedNode() {
+    Address bestNode = channel.getAddress();
+    int minLoad = currentLoad.get();
 
-    synchronized (accountsMap) {
-      for (BankAccount account : accountsMap.values()) {
-
-        boolean matchesId = id.equals(account.getCpf()) || id.equals(account.getUser());
-
-        if (!account.getIsDeleted()
-            && matchesId
-            && password.equals(account.getPassword())) {
-          return true;
-        }
+    try {
+      // se só 1 nó, retorna ele
+      if (channel.getView() == null || channel.getView().size() <= 1) {
+        return bestNode;
       }
 
-      return false;
+      MethodCall loadCall = new MethodCall("getNodeLoad", new Object[] {}, new Class[] {});
+      RspList<Integer> responses = dispatcher.callRemoteMethods(
+          null,
+          loadCall,
+          MyRpcOptions.getAll().setTimeout(Constants.timeOutWaitClusters));
+
+      // após pegar as respostas, verifica qual nó tem menos carga
+      for (Map.Entry<Address, Rsp<Integer>> entry : responses.entrySet()) {
+        Rsp<Integer> rsp = entry.getValue();
+        if (rsp.wasReceived() && !rsp.hasException() && rsp.getValue() != null) {
+          if (rsp.getValue() < minLoad) {
+            minLoad = rsp.getValue();
+            bestNode = entry.getKey();
+          }
+        }
+      }
+    } catch (Exception e) {
+      System.err.println("[" + nodeName + "] Erro ao consultar carga dos nós, usando nó local: " + e.getMessage());
+    }
+
+    return bestNode;
+  }
+
+  public boolean verifyCredentials(String id, String password) {
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (accountsMap) {
+        for (BankAccount account : accountsMap.values()) {
+
+          boolean matchesId = id.equals(account.getCpf()) || id.equals(account.getUser());
+
+          if (!account.getIsDeleted()
+              && matchesId
+              && password.equals(account.getPassword())) {
+            return true;
+          }
+        }
+
+        return false;
+      }
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
   public boolean createAccount(String user, String cpf, String password) {
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (accountsMap) {
 
-    synchronized (accountsMap) {
+        if (accountsMap.containsKey(cpf)) {
+          return false;
+        }
 
-      if (accountsMap.containsKey(cpf)) {
-        return false;
+        // Cria conta no arquivo
+        if (!accountService.create(user, cpf, password)) {
+          return false;
+        }
+
+        // Recupera conta
+        BankAccount account = accountService.readAccount(cpf);
+
+        // Atualiza HashMap
+        accountsMap.put(cpf, account);
+
+        return true;
       }
-
-      // Cria conta no arquivo
-      if (!accountService.create(user, cpf, password)) {
-        return false;
-      }
-
-      // Recupera conta
-      BankAccount account = accountService.readAccount(cpf);
-
-      // Atualiza HashMap
-      accountsMap.put(cpf, account);
-
-      return true;
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
@@ -218,25 +280,30 @@ public class DataNode implements Receiver {
       String cpf,
       String newPassword) {
 
-    synchronized (accountsMap) {
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (accountsMap) {
 
-      BankAccount account = accountsMap.get(cpf);
+        BankAccount account = accountsMap.get(cpf);
 
-      if (account == null) {
-        return false;
+        if (account == null) {
+          return false;
+        }
+
+        account.setUser(newUser);
+        account.setPassword(newPassword);
+
+        try {
+          accountService.saveAll(accountsMap.values());
+          return true;
+
+        } catch (Exception e) {
+          e.printStackTrace();
+          return false;
+        }
       }
-
-      account.setUser(newUser);
-      account.setPassword(newPassword);
-
-      try {
-        accountService.saveAll(accountsMap.values());
-        return true;
-
-      } catch (Exception e) {
-        e.printStackTrace();
-        return false;
-      }
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
@@ -245,185 +312,214 @@ public class DataNode implements Receiver {
       String idDestiny,
       double amount) {
 
-    // Mantém consistência durante escrita
-    synchronized (accountsMap) {
-      synchronized (transfersMap) {
+    currentLoad.incrementAndGet();
+    try {
+      // Mantém consistência durante escrita
+      synchronized (accountsMap) {
+        synchronized (transfersMap) {
 
-        BankAccount source = accountsMap.get(idSource);
-        BankAccount destiny = accountsMap.get(idDestiny);
+          BankAccount source = accountsMap.get(idSource);
+          BankAccount destiny = accountsMap.get(idDestiny);
 
-        if (source == null
-            || destiny == null
-            || source.getBalance() < amount) {
-          return false;
+          if (source == null
+              || destiny == null
+              || source.getBalance() < amount) {
+            return false;
+          }
+
+          source.setBalance(source.getBalance() - amount);
+          destiny.setBalance(destiny.getBalance() + amount);
+
+          // Cria e armazena histórico da transferência
+          String transferId = UUID.randomUUID().toString();
+
+          BankTransfer newTransfer = new BankTransfer(
+              transferId,
+              idSource,
+              idDestiny,
+              amount,
+              Instant.now());
+
+          transfersMap.put(transferId, newTransfer);
+
+          // Persiste modificações nos arquivos JSON
+          try {
+            accountService.saveAll(accountsMap.values());
+            transferService.saveAll(transfersMap.values());
+
+          } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+          }
+
+          System.out.printf(
+              "[%s] Transferência efetuada: R$%.2f de %s para %s%n",
+              nodeName,
+              amount,
+              idSource,
+              idDestiny);
+
+          showAmount();
+
+          return true;
         }
-
-        source.setBalance(source.getBalance() - amount);
-        destiny.setBalance(destiny.getBalance() + amount);
-
-        // Cria e armazena histórico da transferência
-        String transferId = UUID.randomUUID().toString();
-
-        BankTransfer newTransfer = new BankTransfer(
-            transferId,
-            idSource,
-            idDestiny,
-            amount,
-            Instant.now());
-
-        transfersMap.put(transferId, newTransfer);
-
-        // Persiste modificações nos arquivos JSON
-        try {
-          accountService.saveAll(accountsMap.values());
-          transferService.saveAll(transfersMap.values());
-
-        } catch (Exception e) {
-          e.printStackTrace();
-          return false;
-        }
-
-        System.out.printf(
-            "[%s] Transferência efetuada: R$%.2f de %s para %s%n",
-            nodeName,
-            amount,
-            idSource,
-            idDestiny);
-
-        showAmount();
-
-        return true;
       }
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
   public BankAccount getAccount(String idConta) {
-
-    synchronized (accountsMap) {
-      return accountsMap.get(idConta);
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (accountsMap) {
+        return accountsMap.get(idConta);
+      }
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
   // REPLICAÇÃO DE INFORMAÇÃO
 
   public void replicateSaveAccount(String accountId, String owner, String password, double balance) {
-    synchronized (accountsMap) {
-      try {
-        BankAccount account = accountsMap.get(accountId);
-        if (account == null) {
-          account = new BankAccount();
-          account.setCpf(accountId);
-          account.setPassword(password);
-          account.setUser(owner);
-        } else {
-          account.setUser(owner);
-          if (password != null && !password.isEmpty()) {
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (accountsMap) {
+        try {
+          BankAccount account = accountsMap.get(accountId);
+          if (account == null) {
+            account = new BankAccount();
+            account.setCpf(accountId);
             account.setPassword(password);
+            account.setUser(owner);
+          } else {
+            account.setUser(owner);
+            if (password != null && !password.isEmpty()) {
+              account.setPassword(password);
+            }
           }
+          account.setBalance(balance);
+
+          accountsMap.put(accountId, account);
+          accountService.saveAll(accountsMap.values()); // Salva no JSON
+
+          System.out.println("[" + nodeName + "] Conta " + accountId + " replicada e salva com sucesso.");
+        } catch (Exception e) {
+          System.err.println("[" + nodeName + "] Erro ao replicar conta: " + e.getMessage());
         }
-        account.setBalance(balance);
-
-        accountsMap.put(accountId, account);
-        accountService.saveAll(accountsMap.values()); // Salva no JSON
-
-        System.out.println("[" + nodeName + "] Conta " + accountId + " replicada e salva com sucesso.");
-      } catch (Exception e) {
-        System.err.println("[" + nodeName + "] Erro ao replicar conta: " + e.getMessage());
       }
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
   public void replicateSaveTransfer(String transferId, String sourceCpf, String destCpf, double amount) {
-    synchronized (transfersMap) {
-      try {
-        BankTransfer newTransfer = new BankTransfer(
-            transferId,
-            sourceCpf,
-            destCpf,
-            amount,
-            Instant.now());
-        transfersMap.put(transferId, newTransfer);
-        transferService.saveAll(transfersMap.values());
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (transfersMap) {
+        try {
+          BankTransfer newTransfer = new BankTransfer(
+              transferId,
+              sourceCpf,
+              destCpf,
+              amount,
+              Instant.now());
+          transfersMap.put(transferId, newTransfer);
+          transferService.saveAll(transfersMap.values());
 
-        System.out.println("[" + nodeName + "] Transferência " + transferId + " replicada e salva com sucesso.");
-      } catch (Exception e) {
-        System.err.println("[" + nodeName + "] Erro ao replicar transferência: " + e.getMessage());
+          System.out.println("[" + nodeName + "] Transferência " + transferId + " replicada e salva com sucesso.");
+        } catch (Exception e) {
+          System.err.println("[" + nodeName + "] Erro ao replicar transferência: " + e.getMessage());
+        }
       }
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
   // ROLLBACKS -> DEU RUIIIIMMMM
   public void replicateDeleteAccount(String accountId) {
-    synchronized (accountsMap) {
-      try {
-        // verifica se conta existe no nó
-        if (accountsMap.containsKey(accountId)) {
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (accountsMap) {
+        try {
+          // verifica se conta existe no nó
+          if (accountsMap.containsKey(accountId)) {
 
-          // tira do hashmap (RAM)
-          accountsMap.remove(accountId);
+            // tira do hashmap (RAM)
+            accountsMap.remove(accountId);
 
-          // re escreve json com a deleção
-          accountService.saveAll(accountsMap.values());
+            // re escreve json com a deleção
+            accountService.saveAll(accountsMap.values());
 
-          System.out.println(
-              "[" + nodeName + "] ROLLBACK EXECUTADO: Conta " + accountId + " excluída da memória e do disco.");
-        } else {
-          System.out.println("[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a conta " + accountId
-              + " já não existia localmente.");
+            System.out.println(
+                "[" + nodeName + "] ROLLBACK EXECUTADO: Conta " + accountId + " excluída da memória e do disco.");
+          } else {
+            System.out.println("[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a conta " + accountId
+                + " já não existia localmente.");
+          }
+        } catch (Exception e) {
+          System.err.println(
+              "[" + nodeName + "] ERRO CRÍTICO AO EXECUTAR ROLLBACK da conta " + accountId + ": " + e.getMessage());
         }
-      } catch (Exception e) {
-        System.err.println(
-            "[" + nodeName + "] ERRO CRÍTICO AO EXECUTAR ROLLBACK da conta " + accountId + ": " + e.getMessage());
       }
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
   public void replicateDeleteTransfer(String transferId, String sourceCpf, String destCpf, double amount) {
-    synchronized (transfersMap) {
-      try {
-        // verifica se conta existe no nó
-        if (transfersMap.containsKey(transferId)) {
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (transfersMap) {
+        try {
+          // verifica se conta existe no nó
+          if (transfersMap.containsKey(transferId)) {
 
-          // tira do hashmap (RAM)
-          transfersMap.remove(transferId);
+            // tira do hashmap (RAM)
+            transfersMap.remove(transferId);
 
-          // re escreve json com a deleção
-          transferService.saveAll(transfersMap.values());
+            // re escreve json com a deleção
+            transferService.saveAll(transfersMap.values());
 
-          // volta valor para as contas
-          BankAccount source = accountsMap.get(sourceCpf);
-          BankAccount dest = accountsMap.get(destCpf);
+            // volta valor para as contas
+            BankAccount source = accountsMap.get(sourceCpf);
+            BankAccount dest = accountsMap.get(destCpf);
 
-          if (source != null) {
-            source.setBalance(source.getBalance() + amount);
+            if (source != null) {
+              source.setBalance(source.getBalance() + amount);
+            }
+            if (dest != null) {
+              dest.setBalance(dest.getBalance() - amount);
+            }
+
+            // salva valor nas contas
+            accountService.saveAll(accountsMap.values());
+
+            System.out.println(
+                "[" + nodeName + "] ROLLBACK EXECUTADO: transferencia " + transferId
+                    + " excluída da memória e do disco.");
+          } else {
+            System.out
+                .println(
+                    "[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a transferencia " + transferId
+                        + " já não existia localmente.");
           }
-          if (dest != null) {
-            dest.setBalance(dest.getBalance() - amount);
-          }
-
-          // salva valor nas contas
-          accountService.saveAll(accountsMap.values());
-
-          System.out.println(
-              "[" + nodeName + "] ROLLBACK EXECUTADO: transferencia " + transferId
-                  + " excluída da memória e do disco.");
-        } else {
-          System.out
-              .println("[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a transferencia " + transferId
-                  + " já não existia localmente.");
+        } catch (Exception e) {
+          System.err.println(
+              "[" + nodeName + "] ERRO CRÍTICO AO EXECUTAR ROLLBACK da transferencia " + transferId + ": "
+                  + e.getMessage());
         }
-      } catch (Exception e) {
-        System.err.println(
-            "[" + nodeName + "] ERRO CRÍTICO AO EXECUTAR ROLLBACK da transferencia " + transferId + ": "
-                + e.getMessage());
       }
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
   // --- Auditoria / Debug ---
 
   private void showAmount() {
-
     synchronized (accountsMap) {
 
       double total = accountsMap.values().stream()
@@ -458,11 +554,39 @@ public class DataNode implements Receiver {
         VerifyCredentialsDataRequest request,
         StreamObserver<VerifyCredentialsDataResponse> responseObserver) {
 
+      boolean isValid = false;
+      // pega nó mais vagabundo
+      Address targetNode = getLeastLoadedNode();
+
+      try {
+        // se coordenador é o mais livre
+        if (targetNode.equals(channel.getAddress())) {
+          isValid = DataNode.this.verifyCredentials(request.getId(), request.getPassword());
+
+        } else {
+          // Delega via Unicast JGroups para o nó menos carregado
+          System.out.println("[" + nodeName + "] Delegando verifyCredentials para: " + targetNode);
+
+          MethodCall call = new MethodCall(
+              "verifyCredentials",
+              new Object[] { request.getId(), request.getPassword() },
+              new Class[] { String.class, String.class });
+
+          Boolean result = dispatcher.callRemoteMethod(
+              targetNode,
+              call,
+              new RequestOptions(ResponseMode.GET_FIRST, Constants.timeOut));
+          isValid = (result != null && result);
+        }
+      } catch (Exception e) {
+        System.err.println("[" + nodeName + "] Falha no repasse, executando localmente: " + e.getMessage());
+        // se o caba for preguiçoso, faz tu mesmo
+        isValid = DataNode.this.verifyCredentials(request.getId(), request.getPassword());
+      }
+
+      // retorna resposta montada
       VerifyCredentialsDataResponse response = VerifyCredentialsDataResponse.newBuilder()
-          .setSuccess(
-              DataNode.this.verifyCredentials(
-                  request.getId(),
-                  request.getPassword()))
+          .setSuccess(isValid)
           .build();
 
       responseObserver.onNext(response);
@@ -475,11 +599,27 @@ public class DataNode implements Receiver {
         StreamObserver<ReadAccountDataResponse> responseObserver) {
 
       String accountId = request.getCpf();
+      BankAccount account = DataNode.this.getAccount(accountId);
+      Address targetNode = getLeastLoadedNode();
 
-      BankAccount account;
+      try {
+        if (targetNode.equals(channel.getAddress())) {
+          account = DataNode.this.getAccount(accountId);
+        } else {
+          System.out.println("[" + nodeName + "] Delegando getAccount para: " + targetNode);
+          MethodCall call = new MethodCall(
+              "getAccount",
+              new Object[] { accountId },
+              new Class[] { String.class });
 
-      synchronized (accountsMap) {
-        account = accountsMap.get(accountId);
+          account = dispatcher.callRemoteMethod(
+              targetNode,
+              call,
+              new RequestOptions(ResponseMode.GET_FIRST, Constants.timeOut));
+        }
+      } catch (Exception e) {
+        System.err.println("[" + nodeName + "] Falha no repasse, executando localmente: " + e.getMessage());
+        account = DataNode.this.getAccount(accountId);
       }
 
       ReadAccountDataResponse.Builder responseBuilder = ReadAccountDataResponse.newBuilder();
