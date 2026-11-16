@@ -79,7 +79,7 @@ message ReadAccountDataResponse {
     bool found = 1;
     string cpf = 2;
     string owner = 3;
-    int64 balance_cents = 4;
+    uint64 balance_cents = 4;
 }
 
 // ==============================
@@ -114,7 +114,7 @@ message SaveAccountDataRequest {
     string cpf = 1;
     string owner = 2;
     string password = 3;
-    int64 balance_cents = 4;
+    uint64 balance_cents = 4;
 }
 
 message SaveAccountDataResponse {
@@ -128,7 +128,7 @@ message Transfer {
     string transfer_id = 1;
     string source = 2;
     string destiny= 3;
-    int64 amount_cents = 4;
+    uint64 amount_cents = 4;
     google.protobuf.Timestamp created_at = 5;
 }
 
@@ -182,7 +182,7 @@ message SaveTransferDataRequest {
     string transfer_id = 1;
     string source_cpf = 2;
     string destination_cpf = 3;
-    int64 amount_cents = 4;
+    uint64 amount_cents = 4;
 }
 
 message SaveTransferDataResponse {
