@@ -6,9 +6,9 @@ import br.com.bancoVirtualDistribuido.config.Constants;
 import br.com.bancoVirtualDistribuido.config.MyRpcOptions;
 
 import org.jgroups.JChannel;
+import org.jgroups.MergeView;
 import org.jgroups.Receiver;
 import org.jgroups.View;
-import org.checkerframework.checker.units.qual.t;
 import org.jgroups.Address;
 import org.jgroups.blocks.RpcDispatcher;
 import org.jgroups.blocks.MethodCall;
@@ -17,6 +17,8 @@ import org.jgroups.blocks.ResponseMode;
 import org.jgroups.util.Util;
 import org.jgroups.util.RspList;
 import org.jgroups.util.Rsp;
+import java.util.Comparator;
+import java.util.stream.Collectors;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -55,6 +57,8 @@ public class DataNode implements Receiver {
 
   // int atomico para gerenciar total de processos que nó está executando
   private final AtomicInteger currentLoad = new AtomicInteger(0);
+
+  private volatile boolean clusterReady = false; // impede operações antes de sincronizar
 
   public DataNode(String nodeName, String accountDataPath, String transfersDataPath) {
     this.nodeName = nodeName;
@@ -104,7 +108,10 @@ public class DataNode implements Receiver {
     channel.connect(Constants.dataChannelName);
 
     // Pede sincronização para o coordenador
-    channel.getState(null, Constants.timeOut);
+    // channel.getState(null, Constants.timeOut);
+    if (channel.getView().size() > Constants.minDataNodesCluster) {
+      channel.getState(null, Constants.timeOut);
+    }
 
     System.out.println("[" + nodeName
         + "] Nó de dados pronto e conectado ao canal de dados.");
@@ -118,6 +125,36 @@ public class DataNode implements Receiver {
   }
 
   // --- Métodos de Sincronização de Estado do JGroups ---
+
+  public CompleteDataNode getLocalState() {
+    synchronized (accountsMap) {
+      synchronized (transfersMap) {
+        return new CompleteDataNode(new HashMap<>(accountsMap), new HashMap<>(transfersMap));
+      }
+    }
+  }
+
+  public void applyQuorumState(CompleteDataNode finalState) {
+    synchronized (accountsMap) {
+      synchronized (transfersMap) {
+        accountsMap.clear();
+        accountsMap.putAll(finalState.getAccounts());
+
+        transfersMap.clear();
+        transfersMap.putAll(finalState.getTransfers());
+
+        try {
+          accountService.saveAll(accountsMap.values());
+          transferService.saveAll(transfersMap.values());
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    }
+    this.clusterReady = true; // Libera o servidor para atender requisições!
+    System.out.println("[" + nodeName + "] Estado consolidado! Nó PRONTO para operar.");
+    showAmount();
+  }
 
   @Override
   public void getState(OutputStream output) throws Exception {
@@ -158,9 +195,60 @@ public class DataNode implements Receiver {
     accountService.saveAll(accountsMap.values());
     transferService.saveAll(transfersMap.values());
 
+    this.clusterReady = true;
+
     System.out.println(
         "[" + nodeName + "] Contas e transferências sincronizadas com sucesso.");
 
+    showAmount();
+  }
+
+  // junta os dados dos nós caso sejam separados na rede ou cold start
+  public void mergeState(CompleteDataNode remoteState) {
+    synchronized (accountsMap) {
+      synchronized (transfersMap) {
+
+        // add no Map de contas caso não existam anteriormente
+        for (Map.Entry<String, BankAccount> entry : remoteState.getAccounts().entrySet()) {
+          accountsMap.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+
+        // coloca as transferencias que não existiam antes
+        transfersMap.putAll(remoteState.getTransfers());
+
+        // volta o saldo das contas para o base para posteriormente aplicar as
+        // transações na ordem, garantindo consistencia
+        for (BankAccount acc : accountsMap.values()) {
+          acc.setBalance(Constants.inititalBalance);
+        }
+
+        // ordena as transferencias por data/hora e aplica elas em cada conta,
+        // removendo/adicionando o valor
+        List<BankTransfer> orderedTransfers = transfersMap.values().stream()
+            .sorted(Comparator.comparing(BankTransfer::getTimestamp))
+            .collect(Collectors.toList());
+
+        for (BankTransfer tx : orderedTransfers) {
+          BankAccount source = accountsMap.get(tx.getSource());
+          BankAccount destiny = accountsMap.get(tx.getDestiny());
+
+          if (source != null && destiny != null && source.getBalance() >= tx.getAmount()) {
+            source.setBalance(source.getBalance() - tx.getAmount());
+            destiny.setBalance(destiny.getBalance() + tx.getAmount());
+          }
+        }
+
+        // salva no disco
+        try {
+          accountService.saveAll(accountsMap.values());
+          transferService.saveAll(transfersMap.values());
+        } catch (Exception e) {
+          System.err.println("[" + nodeName + "] Erro ao salvar estado mesclado: " + e.getMessage());
+        }
+      }
+    }
+
+    System.out.println("[" + nodeName + "] Merge de dados concluído com sucesso!");
     showAmount();
   }
 
@@ -184,8 +272,67 @@ public class DataNode implements Receiver {
         "[" + nodeName + "] Nova visão do canal de Dados: " + view);
 
     // verifica se é coordenador, se for, sobe server grpc para servir como proxy
-    if (!view.getMembers().isEmpty() && channel.getAddress().equals(view.getMembers().get(0))) {
-      startGrpcServer();
+    boolean isCoordinator = !view.getMembers().isEmpty()
+        && channel.getAddress().equals(view.getMembers().get(0));
+
+    if (!isCoordinator) {
+      return;
+    }
+
+    // coordenador inicia server gRPC
+    startGrpcServer();
+
+    // coldStart
+    if ((!clusterReady || view instanceof MergeView) && view.getMembers().size() >= Constants.minDataNodesCluster) {
+      // cria uma thread pra pedir os estados para os nós online
+      new Thread(() -> {
+        try {
+          System.out.println("[" + nodeName + "] Quórum mínimo atingido! Comparando estados locais...");
+
+          // pede estado pros nos
+          RspList<CompleteDataNode> responses = dispatcher.callRemoteMethods(
+              null,
+              "getLocalState",
+              new Object[] {},
+              new Class[] {},
+              MyRpcOptions.getAll().setTimeout(Constants.timeOut));
+
+          // Faz o merge de todos os estados recebidos
+          for (Rsp<CompleteDataNode> rsp : responses.values()) {
+            if (rsp.wasReceived() && rsp.getValue() != null) {
+              mergeState(rsp.getValue());
+            }
+          }
+
+          // envia o estado final e libera o sistema pra funcionar
+          CompleteDataNode winningState = getLocalState();
+          dispatcher.callRemoteMethods(
+              null,
+              "applyQuorumState",
+              new Object[] { winningState },
+              new Class[] { CompleteDataNode.class },
+              MyRpcOptions.getAll().setTimeout(Constants.timeOut));
+
+        } catch (Exception e) {
+          System.err.println("[" + nodeName + "] Erro na consolidação inicial: " + e.getMessage());
+        }
+      }).start();
+    } else if (clusterReady) {
+      // lança uma thread que garante que, caso um nó tenha se perdido e voltado
+      // depois, ele consiga o quorum do estado do sistema
+      new Thread(() -> {
+        try {
+          CompleteDataNode currentState = getLocalState();
+          dispatcher.callRemoteMethods(
+              null,
+              "applyQuorumState",
+              new Object[] { currentState },
+              new Class[] { CompleteDataNode.class },
+              MyRpcOptions.getAll().setTimeout(Constants.timeOut));
+        } catch (Exception e) {
+          System.err.println("[" + nodeName + "] Erro ao sincronizar nó reingressante: " + e.getMessage());
+        }
+      }).start();
     }
   }
 
@@ -224,6 +371,20 @@ public class DataNode implements Receiver {
     }
 
     return bestNode;
+  }
+
+  public List<BankTransfer> getTransfersByCpf(String cpf) {
+    currentLoad.incrementAndGet();
+    try {
+      synchronized (transfersMap) {
+        // filtra se a transferencia foi feita/recebida pelo cpf
+        return transfersMap.values().stream()
+            .filter(t -> cpf.equals(t.getSource()) || cpf.equals(t.getDestiny()))
+            .collect(Collectors.toList());
+      }
+    } finally {
+      currentLoad.decrementAndGet();
+    }
   }
 
   public boolean verifyCredentials(String id, String password) {
@@ -472,44 +633,46 @@ public class DataNode implements Receiver {
   public void replicateDeleteTransfer(String transferId, String sourceCpf, String destCpf, double amount) {
     currentLoad.incrementAndGet();
     try {
-      synchronized (transfersMap) {
-        try {
-          // verifica se conta existe no nó
-          if (transfersMap.containsKey(transferId)) {
+      synchronized (accountsMap) {
+        synchronized (transfersMap) {
+          try {
+            // verifica se conta existe no nó
+            if (transfersMap.containsKey(transferId)) {
 
-            // tira do hashmap (RAM)
-            transfersMap.remove(transferId);
+              // tira do hashmap (RAM)
+              transfersMap.remove(transferId);
 
-            // re escreve json com a deleção
-            transferService.saveAll(transfersMap.values());
+              // re escreve json com a deleção
+              transferService.saveAll(transfersMap.values());
 
-            // volta valor para as contas
-            BankAccount source = accountsMap.get(sourceCpf);
-            BankAccount dest = accountsMap.get(destCpf);
+              // volta valor para as contas
+              BankAccount source = accountsMap.get(sourceCpf);
+              BankAccount dest = accountsMap.get(destCpf);
 
-            if (source != null) {
-              source.setBalance(source.getBalance() + amount);
+              if (source != null) {
+                source.setBalance(source.getBalance() + amount);
+              }
+              if (dest != null) {
+                dest.setBalance(dest.getBalance() - amount);
+              }
+
+              // salva valor nas contas
+              accountService.saveAll(accountsMap.values());
+
+              System.out.println(
+                  "[" + nodeName + "] ROLLBACK EXECUTADO: transferencia " + transferId
+                      + " excluída da memória e do disco.");
+            } else {
+              System.out
+                  .println(
+                      "[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a transferencia " + transferId
+                          + " já não existia localmente.");
             }
-            if (dest != null) {
-              dest.setBalance(dest.getBalance() - amount);
-            }
-
-            // salva valor nas contas
-            accountService.saveAll(accountsMap.values());
-
-            System.out.println(
-                "[" + nodeName + "] ROLLBACK EXECUTADO: transferencia " + transferId
-                    + " excluída da memória e do disco.");
-          } else {
-            System.out
-                .println(
-                    "[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a transferencia " + transferId
-                        + " já não existia localmente.");
+          } catch (Exception e) {
+            System.err.println(
+                "[" + nodeName + "] ERRO CRÍTICO AO EXECUTAR ROLLBACK da transferencia " + transferId + ": "
+                    + e.getMessage());
           }
-        } catch (Exception e) {
-          System.err.println(
-              "[" + nodeName + "] ERRO CRÍTICO AO EXECUTAR ROLLBACK da transferencia " + transferId + ": "
-                  + e.getMessage());
         }
       }
     } finally {
@@ -553,6 +716,14 @@ public class DataNode implements Receiver {
     public void verifyCredentialsData(
         VerifyCredentialsDataRequest request,
         StreamObserver<VerifyCredentialsDataResponse> responseObserver) {
+
+      // se o cluster não estiver pronto (estados sincronizados), impede login
+      if (!clusterReady) {
+        System.out.println("[" + nodeName + "] Login recusado: aguardando mínimo de servidores online.");
+        responseObserver.onNext(VerifyCredentialsDataResponse.newBuilder().setSuccess(false).build());
+        responseObserver.onCompleted();
+        return;
+      }
 
       boolean isValid = false;
       // pega nó mais vagabundo
@@ -598,8 +769,14 @@ public class DataNode implements Receiver {
         ReadAccountDataRequest request,
         StreamObserver<ReadAccountDataResponse> responseObserver) {
 
+      if (!clusterReady) {
+        responseObserver.onNext(ReadAccountDataResponse.newBuilder().setFound(false).build());
+        responseObserver.onCompleted();
+        return;
+      }
+
       String accountId = request.getCpf();
-      BankAccount account = DataNode.this.getAccount(accountId);
+      BankAccount account = null;
       Address targetNode = getLeastLoadedNode();
 
       try {
@@ -645,6 +822,12 @@ public class DataNode implements Receiver {
     public void saveAccountData(
         SaveAccountDataRequest request,
         StreamObserver<SaveAccountDataResponse> responseObserver) {
+
+      if (!clusterReady) {
+        responseObserver.onNext(SaveAccountDataResponse.newBuilder().setSuccess(false).build());
+        responseObserver.onCompleted();
+        return;
+      }
 
       String accountId = request.getCpf();
       String owner = request.getOwner();
@@ -746,8 +929,7 @@ public class DataNode implements Receiver {
 
             // Joga na galera que conseguiu pra eles deletarem e espera um pouquin pra ver
             // se responderam
-            RequestOptions rollbackOptions = MyRpcOptions.getAll().timeout(Constants.timeOutRollBack)
-                .setTimeout(Constants.timeOutRollBack);
+            RequestOptions rollbackOptions = MyRpcOptions.getAll().setTimeout(Constants.timeOutRollBack);
             dispatcher.callRemoteMethods(successNodes, rollbackCall, rollbackOptions);
 
             System.out.println("[DataNode] Rollback enviado para " + successNodes.size() + " nós.");
@@ -771,6 +953,12 @@ public class DataNode implements Receiver {
     public void editAccountData(
         EditAccountDataRequest request,
         StreamObserver<EditAccountDataResponse> responseObserver) {
+
+      if (!clusterReady) {
+        responseObserver.onNext(EditAccountDataResponse.newBuilder().setSuccess(false).build());
+        responseObserver.onCompleted();
+        return;
+      }
 
       String accountId = request.getCpf();
       String newUser = request.getOwner();
@@ -931,6 +1119,12 @@ public class DataNode implements Receiver {
         SaveTransferDataRequest request,
         StreamObserver<SaveTransferDataResponse> responseObserver) {
 
+      if (!clusterReady) {
+        responseObserver.onNext(SaveTransferDataResponse.newBuilder().setSuccess(false).build());
+        responseObserver.onCompleted();
+        return;
+      }
+
       String transferId = request.getTransferId();
       double amount = request.getAmountCents() / 100.0;
       String source = request.getSourceCpf();
@@ -1046,6 +1240,60 @@ public class DataNode implements Receiver {
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     }
+
+    @Override
+    public void getTransferData(
+        GetTransferDataRequest request,
+        StreamObserver<GetTransferDataResponse> responseObserver) {
+
+      if (!clusterReady) {
+        responseObserver.onNext(GetTransferDataResponse.newBuilder().build());
+        responseObserver.onCompleted();
+        return;
+      }
+
+      String cpf = request.getCpf();
+      List<BankTransfer> transfers = new ArrayList<>();
+      Address targetNode = getLeastLoadedNode();
+
+      try {
+        if (targetNode.equals(channel.getAddress())) {
+          transfers = DataNode.this.getTransfersByCpf(cpf);
+        } else {
+          System.out.println("[" + nodeName + "] Delegando getTransfersByCpf para: " + targetNode);
+          MethodCall call = new MethodCall(
+              "getTransfersByCpf",
+              new Object[] { cpf },
+              new Class[] { String.class });
+
+          transfers = dispatcher.callRemoteMethod(
+              targetNode,
+              call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+        }
+      } catch (Exception e) {
+        System.err.println("[" + nodeName + "] Falha no repasse de extrato, executando localmente: " + e.getMessage());
+        transfers = DataNode.this.getTransfersByCpf(cpf);
+      }
+
+      GetTransferDataResponse.Builder responseBuilder = GetTransferDataResponse.newBuilder();
+
+      if (transfers != null) {
+        for (BankTransfer t : transfers) {
+          Transfer grpcTransfer = Transfer.newBuilder()
+              .setTransferId(t.getUUId())
+              .setSource(t.getSource())
+              .setDestiny(t.getDestiny())
+              .setAmountCents((long) (t.getAmount() * 100))
+              .build();
+
+          responseBuilder.addTransfer(grpcTransfer);
+        }
+      }
+
+      responseObserver.onNext(responseBuilder.build());
+      responseObserver.onCompleted();
+    }
   }
 
   public static void main(String[] args) throws Exception {
@@ -1063,7 +1311,7 @@ public class DataNode implements Receiver {
         accountsPath = Constants.accountsDatabaseFolder + args[1];
       }
       if (args.length > 2) {
-        transfersPath = Constants.accountsDatabaseFolder + args[2];
+        transfersPath = Constants.transfersDatabaseFolder + args[2];
       }
       if (args.length > 3) {
         nodePort = Integer.parseInt(args[3]);

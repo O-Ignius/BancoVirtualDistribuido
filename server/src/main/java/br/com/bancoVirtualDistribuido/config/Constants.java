@@ -30,7 +30,6 @@ public final class Constants {
 
   // configs para minimo de servidores e tempo de espera para esses minimos
   public static final int minDataNodesCluster = 3;
-  public static final int minControlNodesCluster = 3;
   public static final int timeOutWaitClusters = 3000; // ms
 
   // função para constante jGroups
