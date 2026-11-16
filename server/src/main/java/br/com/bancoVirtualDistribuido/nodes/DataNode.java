@@ -409,127 +409,6 @@ public class DataNode implements Receiver {
     }
   }
 
-  public boolean createAccount(String user, String cpf, String password) {
-    currentLoad.incrementAndGet();
-    try {
-      synchronized (accountsMap) {
-
-        if (accountsMap.containsKey(cpf)) {
-          return false;
-        }
-
-        // Cria conta no arquivo
-        if (!accountService.create(user, cpf, password)) {
-          return false;
-        }
-
-        // Recupera conta
-        BankAccount account = accountService.readAccount(cpf);
-
-        // Atualiza HashMap
-        accountsMap.put(cpf, account);
-
-        return true;
-      }
-    } finally {
-      currentLoad.decrementAndGet();
-    }
-  }
-
-  public boolean modifyAccount(
-      String newUser,
-      String cpf,
-      String newPassword) {
-
-    currentLoad.incrementAndGet();
-    try {
-      synchronized (accountsMap) {
-
-        BankAccount account = accountsMap.get(cpf);
-
-        if (account == null) {
-          return false;
-        }
-
-        account.setUser(newUser);
-        account.setPassword(newPassword);
-
-        try {
-          accountService.saveAll(accountsMap.values());
-          return true;
-
-        } catch (Exception e) {
-          e.printStackTrace();
-          return false;
-        }
-      }
-    } finally {
-      currentLoad.decrementAndGet();
-    }
-  }
-
-  public boolean debitAndCredit(
-      String idSource,
-      String idDestiny,
-      double amount) {
-
-    currentLoad.incrementAndGet();
-    try {
-      // Mantém consistência durante escrita
-      synchronized (accountsMap) {
-        synchronized (transfersMap) {
-
-          BankAccount source = accountsMap.get(idSource);
-          BankAccount destiny = accountsMap.get(idDestiny);
-
-          if (source == null
-              || destiny == null
-              || source.getBalance() < amount) {
-            return false;
-          }
-
-          source.setBalance(source.getBalance() - amount);
-          destiny.setBalance(destiny.getBalance() + amount);
-
-          // Cria e armazena histórico da transferência
-          String transferId = UUID.randomUUID().toString();
-
-          BankTransfer newTransfer = new BankTransfer(
-              transferId,
-              idSource,
-              idDestiny,
-              amount,
-              Instant.now());
-
-          transfersMap.put(transferId, newTransfer);
-
-          // Persiste modificações nos arquivos JSON
-          try {
-            accountService.saveAll(accountsMap.values());
-            transferService.saveAll(transfersMap.values());
-
-          } catch (Exception e) {
-            e.printStackTrace();
-            return false;
-          }
-
-          System.out.printf(
-              "[%s] Transferência efetuada: R$%.2f de %s para %s%n",
-              nodeName,
-              amount,
-              idSource,
-              idDestiny);
-
-          showAmount();
-
-          return true;
-        }
-      }
-    } finally {
-      currentLoad.decrementAndGet();
-    }
-  }
-
   public BankAccount getAccount(String idConta) {
     currentLoad.incrementAndGet();
     try {
@@ -1094,7 +973,7 @@ public class DataNode implements Receiver {
             RequestOptions rollbackOptions = MyRpcOptions.getAll().setTimeout(Constants.timeOutRollBack);
 
             // envia a ordem de voltar no tempo APENAS para os nós que haviam comitado
-            RspList<Object> rollbackAnswers = dispatcher.callRemoteMethods(successNodes, rollbackCall, rollbackOptions);
+            dispatcher.callRemoteMethods(successNodes, rollbackCall, rollbackOptions);
 
             System.out.println("[DataNode] Rollback enviado para " + successNodes.size() + " nós.");
 
