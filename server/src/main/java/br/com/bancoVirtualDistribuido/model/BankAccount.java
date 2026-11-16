@@ -1,6 +1,10 @@
 package br.com.bancoVirtualDistribuido.model;
 
-public class BankAccount {
+import java.io.Serializable;
+
+public class BankAccount implements Serializable {
+  private static final long serialVersionUID = 1L;
+
   private String user;
   private String password;
   private double balance;

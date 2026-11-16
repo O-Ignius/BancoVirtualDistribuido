@@ -1,8 +1,11 @@
 package br.com.bancoVirtualDistribuido.model;
 
+import java.io.Serializable;
 import java.time.Instant;
 
-public class BankTransfer {
+public class BankTransfer implements Serializable {
+  private static final long serialVersionUID = 1L;
+
   private String uuid;
   private String source;
   private String destiny;
