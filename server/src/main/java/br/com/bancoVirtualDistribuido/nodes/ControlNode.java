@@ -2,9 +2,14 @@ package br.com.bancoVirtualDistribuido.nodes;
 
 import org.jgroups.JChannel;
 import org.jgroups.Receiver;
+import org.jgroups.View;
+import org.jgroups.Address;
+import org.jgroups.blocks.MethodCall;
 import org.jgroups.blocks.RpcDispatcher;
 import org.jgroups.blocks.locking.LockService;
 import org.jgroups.util.Util;
+import org.jgroups.util.RspList;
+import org.jgroups.util.Rsp;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -12,10 +17,13 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import br.com.bancoVirtualDistribuido.config.Constants;
+import br.com.bancoVirtualDistribuido.config.MyRpcOptions;
 import br.com.bancoVirtualDistribuido.grpc.data.*;
 import br.com.bancoVirtualDistribuido.grpc.service.*;
 
@@ -25,6 +33,7 @@ public class ControlNode implements Receiver {
   private RpcDispatcher dispatcher;
   private LockService lockService;
   private String nodeName;
+  private int grpcPort;
 
   private DataNodeClient dataClient;
   private io.grpc.Server grpcServer;
@@ -32,11 +41,14 @@ public class ControlNode implements Receiver {
   // Cliente online
   private final Set<String> loggedClients = new HashSet<>();
 
+  private final AtomicInteger currentLoad = new AtomicInteger(0);
+
   public ControlNode(String nodeName) {
     this.nodeName = nodeName;
   }
 
   public void start(int nodePort) throws Exception {
+    this.grpcPort = nodePort;
     channel = new JChannel("jgroups-config.xml");
     channel.setName(nodeName);
 
@@ -45,24 +57,15 @@ public class ControlNode implements Receiver {
 
     lockService = new LockService(channel);
 
-    channel.connect("ControlChannel");
+    channel.connect(Constants.controlChannelName);
 
     // Pega estado do coordenador
-    channel.getState(null, 10000);
+    channel.getState(null, Constants.timeOut);
 
     // Conecta ao servidor de dados
     dataClient = new DataNodeClient();
 
     System.out.println("[" + nodeName + "] Conectado ao canal de Controle.");
-
-    // Abre conexão para Gateway
-    grpcServer = io.grpc.ServerBuilder.forPort(nodePort)
-        .addService(new ControlNodeGrpcServiceImpl())
-        .build()
-        .start();
-
-    System.out.println("[" + nodeName + "] Servidor gRPC escutando o Gateway na porta "
-        + nodePort);
   }
 
   @Override
@@ -85,21 +88,109 @@ public class ControlNode implements Receiver {
     System.out.println("[" + nodeName + "] Estado de clientes logados sincronizado.");
   }
 
-  // ---------- RPC ------------
+  private synchronized void startGrpcServer() {
+    if (grpcServer == null) {
+      try {
+        grpcServer = io.grpc.ServerBuilder.forPort(grpcPort)
+            .addService(new ControlNodeGrpcServiceImpl())
+            .build()
+            .start();
+        System.out.println("[" + nodeName + "] COORDENADOR DE CONTROLE: Escutando Gateway na porta " + grpcPort);
+      } catch (Exception e) {
+        System.err.println("[" + nodeName + "] Erro ao iniciar servidor gRPC: " + e.getMessage());
+      }
+    }
+  }
 
-  public boolean loginService(String idCliente, String password) {
-    if (!dataClient.verifyCredentialsData(idCliente, password)) {
-      return false;
+  @Override
+  public void viewAccepted(View view) {
+    System.out.println("[" + nodeName + "] Nova visão do canal de Controle: " + view);
+
+    if (!view.getMembers().isEmpty() && channel.getAddress().equals(view.getMembers().get(0))) {
+      startGrpcServer();
+    }
+  }
+
+  // carga do no
+  public int getNodeLoad() {
+    return currentLoad.get();
+  }
+
+  // seleciona nó mais livre
+  private Address getLeastLoadedNode() {
+    Address bestNode = channel.getAddress();
+    int minLoad = currentLoad.get();
+
+    try {
+      // se só 1 nó, retorna ele
+      if (channel.getView() == null || channel.getView().size() <= 1) {
+        return bestNode;
+      }
+
+      MethodCall loadCall = new MethodCall("getNodeLoad", new Object[] {}, new Class[] {});
+      RspList<Integer> responses = dispatcher.callRemoteMethods(
+          null,
+          loadCall,
+          MyRpcOptions.getAll().setTimeout(Constants.timeOutWaitClusters));
+
+      // após pegar as respostas, verifica qual nó tem menos carga
+      for (Map.Entry<Address, Rsp<Integer>> entry : responses.entrySet()) {
+        Rsp<Integer> rsp = entry.getValue();
+        if (rsp.wasReceived() && !rsp.hasException() && rsp.getValue() != null) {
+          if (rsp.getValue() < minLoad) {
+            minLoad = rsp.getValue();
+            bestNode = entry.getKey();
+          }
+        }
+      }
+    } catch (Exception e) {
+      System.err.println("[" + nodeName + "] Erro ao consultar carga dos nós, usando nó local: " + e.getMessage());
     }
 
+    return bestNode;
+  }
+
+  public void replicateAddLoggedClient(String idCliente) {
     synchronized (loggedClients) {
       loggedClients.add(idCliente);
     }
+  }
 
-    return true;
+  // ---------- RPC ------------
+
+  public boolean loginService(String idCliente, String password) {
+    currentLoad.incrementAndGet();
+    try {
+      if (!dataClient.verifyCredentialsData(idCliente, password)) {
+        return false;
+      }
+
+      try {
+        MethodCall call = new MethodCall("replicateAddLoggedClient", new Object[] { idCliente },
+            new Class[] { String.class });
+        dispatcher.callRemoteMethods(null, call, MyRpcOptions.getAll().setTimeout(Constants.timeOut));
+      } catch (Exception e) {
+        replicateAddLoggedClient(idCliente);
+      }
+
+      return true;
+
+    } finally {
+      currentLoad.decrementAndGet();
+    }
+  }
+
+  public boolean createAccount(String cpf, String user, String password) {
+    currentLoad.incrementAndGet();
+    try {
+      return dataClient.saveAccountData(cpf, user, password, Constants.inititalBalance);
+    } finally {
+      currentLoad.decrementAndGet();
+    }
   }
 
   public boolean processTransfer(String idSource, String idDestiny, double amount) {
+    currentLoad.incrementAndGet();
     String lock1 = idSource.compareTo(idDestiny) < 0 ? idSource : idDestiny;
     String lock2 = idSource.compareTo(idDestiny) < 0 ? idDestiny : idSource;
 
@@ -134,6 +225,25 @@ public class ControlNode implements Receiver {
     } finally {
       l2.unlock();
       l1.unlock();
+      currentLoad.decrementAndGet();
+    }
+  }
+
+  public ReadAccountDataResponse fetchAccountFromData(String cpf) {
+    currentLoad.incrementAndGet();
+    try {
+      return dataClient.readAccountData(cpf);
+    } finally {
+      currentLoad.decrementAndGet();
+    }
+  }
+
+  public GetTransferDataResponse fetchTransfersFromData(String cpf) {
+    currentLoad.incrementAndGet();
+    try {
+      return dataClient.readTransferData(cpf);
+    } finally {
+      currentLoad.decrementAndGet();
     }
   }
 
@@ -161,8 +271,25 @@ public class ControlNode implements Receiver {
     public void loginService(LoginServiceRequest request,
         io.grpc.stub.StreamObserver<LoginServiceResponse> responseObserver) {
 
-      boolean success = ControlNode.this.loginService(
-          request.getId(), request.getPassword());
+      Address target = getLeastLoadedNode();
+      boolean success = false;
+
+      try {
+        if (target.equals(channel.getAddress())) {
+          success = ControlNode.this.loginService(request.getId(), request.getPassword());
+        } else {
+          System.out.println("[" + nodeName + "] Delegando login para: " + target);
+          MethodCall call = new MethodCall(
+              "loginService",
+              new Object[] { request.getId(), request.getPassword() },
+              new Class[] { String.class, String.class });
+          Boolean res = dispatcher.callRemoteMethod(target, call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+          success = (res != null && res);
+        }
+      } catch (Exception e) {
+        success = ControlNode.this.loginService(request.getId(), request.getPassword());
+      }
 
       LoginServiceResponse response = LoginServiceResponse.newBuilder()
           .setSuccess(success)
@@ -176,15 +303,25 @@ public class ControlNode implements Receiver {
     public void createAccountService(CreateAccountServiceRequest request,
         io.grpc.stub.StreamObserver<CreateAccountServiceResponse> responseObserver) {
 
-      System.out.println("[" + nodeName
-          + "] Processando criação de conta para: " + request.getUser());
+      boolean success = false;
+      Address target = getLeastLoadedNode();
 
-      // O Controle solicita ao DataNode o salvamento da conta
-      boolean success = dataClient.saveAccountData(
-          request.getCpf(),
-          request.getUser(),
-          request.getPassword(),
-          Constants.inititalBalance);
+      try {
+        if (target.equals(channel.getAddress())) {
+          success = ControlNode.this.createAccount(request.getCpf(), request.getUser(), request.getPassword());
+        } else {
+          System.out.println("[" + nodeName + "] Delegando criação de conta para: " + target);
+          MethodCall call = new MethodCall(
+              "createAccount",
+              new Object[] { request.getCpf(), request.getUser(), request.getPassword() },
+              new Class[] { String.class, String.class, String.class });
+          Boolean res = dispatcher.callRemoteMethod(target, call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+          success = (res != null && res);
+        }
+      } catch (Exception e) {
+        success = ControlNode.this.createAccount(request.getCpf(), request.getUser(), request.getPassword());
+      }
 
       CreateAccountServiceResponse response = CreateAccountServiceResponse.newBuilder()
           .setSuccess(success)
@@ -202,8 +339,25 @@ public class ControlNode implements Receiver {
       String destiny = request.getDestinationCpf();
       double amount = request.getAmountCents() / 100.0;
 
-      // Processa transferência adquirindo os LOCKS do JGroups
-      boolean success = processTransfer(source, destiny, amount);
+      boolean success = false;
+      Address target = getLeastLoadedNode();
+
+      try {
+        if (target.equals(channel.getAddress())) {
+          success = ControlNode.this.processTransfer(source, destiny, amount);
+        } else {
+          System.out.println("[" + nodeName + "] Delegando transferência para: " + target);
+          MethodCall call = new MethodCall(
+              "processTransfer",
+              new Object[] { source, destiny, amount },
+              new Class[] { String.class, String.class, double.class });
+          Boolean res = dispatcher.callRemoteMethod(target, call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+          success = (res != null && res);
+        }
+      } catch (Exception e) {
+        success = ControlNode.this.processTransfer(source, destiny, amount);
+      }
 
       SaveTransferServiceResponse response = SaveTransferServiceResponse.newBuilder()
           .setSuccess(success)
@@ -222,12 +376,22 @@ public class ControlNode implements Receiver {
       try {
         // 1. Pega cpf
         String cpf = request.getCpf();
-        System.out.println("[ControlNode] Buscando dados da conta: " + cpf);
+        Address target = getLeastLoadedNode();
+        ReadAccountDataResponse dataResponse;
 
-        // 2. Pede pro datanode passando a String DIRETO (resolve o Erro 1)
-        ReadAccountDataResponse dataResponse = dataClient.readAccountData(cpf);
+        if (target.equals(channel.getAddress())) {
+          dataResponse = ControlNode.this.fetchAccountFromData(cpf);
+        } else {
+          System.out.println("[" + nodeName + "] Delegando consulta de conta para: " + target);
+          MethodCall call = new MethodCall(
+              "fetchAccountFromData",
+              new Object[] { cpf },
+              new Class[] { String.class });
+          dataResponse = dispatcher.callRemoteMethod(target, call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+        }
 
-        // 3. Monta a resposta
+        // Monta a resposta
         GetAccountServiceResponse response = GetAccountServiceResponse.newBuilder()
             .setCpf(dataResponse.getCpf())
             .setOwner(dataResponse.getOwner())
@@ -254,9 +418,20 @@ public class ControlNode implements Receiver {
 
       try {
         String cpf = request.getSource();
-        System.out.println("[ControlNode] Buscando extrato de transferências para: " + cpf);
+        Address target = getLeastLoadedNode();
+        GetTransferDataResponse dataResponse;
 
-        GetTransferDataResponse dataResponse = dataClient.readTransferData(cpf);
+        if (target.equals(channel.getAddress())) {
+          dataResponse = ControlNode.this.fetchTransfersFromData(cpf);
+        } else {
+          System.out.println("[" + nodeName + "] Delegando extrato para: " + target);
+          MethodCall call = new MethodCall(
+              "fetchTransfersFromData",
+              new Object[] { cpf },
+              new Class[] { String.class });
+          dataResponse = dispatcher.callRemoteMethod(target, call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+        }
 
         GetTransferServiceResponse.Builder responseBuilder = GetTransferServiceResponse.newBuilder()
             .setFound(true);
