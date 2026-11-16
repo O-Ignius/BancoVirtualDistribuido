@@ -6,9 +6,9 @@ public final class Constants {
   private Constants() {
   }
 
-  public static final int timeOut = 10000;
-  public static final int timeOutRetries = 8000;
-  public static final int timeOutRollBack = 3000;
+  public static final int timeOut = 10000; // ms
+  public static final int timeOutRetries = 8000; // ms
+  public static final int timeOutRollBack = 3000; // ms
   public static final String dataChannelName = "DataChannel";
   public static final String controlChannelName = "ControlChannel";
   public static final String accountsDatabaseFolder = "database/";
@@ -27,6 +27,11 @@ public final class Constants {
   // servers ip
   public static final String dataServerIp = "localhost";
   public static final String controlServerIp = "localhost";
+
+  // configs para minimo de servidores e tempo de espera para esses minimos
+  public static final int minDataNodesCluster = 3;
+  public static final int minControlNodesCluster = 3;
+  public static final int timeOutWaitClusters = 3000; // ms
 
   // função para constante jGroups
   public static int getMajority(JChannel channel) {
