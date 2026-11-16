@@ -883,7 +883,7 @@ public class DataNode implements Receiver {
 
           if (!successNodes.isEmpty()) {
             MethodCall rollbackCall = new MethodCall(
-                "replicateRollbackTransfer",
+                "replicateDeleteTransfer",
                 new Object[] { transferId, source, dest, amount },
                 new Class[] { String.class, String.class, String.class, double.class });
 
