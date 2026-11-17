@@ -28,6 +28,9 @@ service BankService {
 
     rpc DeleteAccountService(DeleteAccountServiceRequest)
         returns (DeleteAccountServiceResponse);
+
+    rpc SearchAccountsByNameService(SearchAccountsByNameServiceRequest)
+        returns (SearchAccountsByNameServiceResponse);
   // -------Contas
 
   // -------Transferencias
@@ -66,6 +69,22 @@ message GetTotalBankMoneyServiceResponse {
 // Contas
 // ==============================
 // ==============================
+message Account {
+    string user = 1;
+    string cpf = 2;
+}
+
+// ==============================
+// pesquisa conta por nomes e retorna lista de contas
+// ==============================
+
+message SearchAccountsByNameServiceRequest {
+    string name = 1;
+}
+
+message SearchAccountsByNameServiceResponse {
+    repeated Account accounts = 1;
+}
 
 // ==============================
 // tenta logar

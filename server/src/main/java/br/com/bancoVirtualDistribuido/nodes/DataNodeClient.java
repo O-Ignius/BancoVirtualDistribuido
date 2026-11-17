@@ -32,6 +32,15 @@ public class DataNodeClient {
     }
   }
 
+  // pesquisa por nome e retorna as contas
+  public ReadAccountsByNameDataResponse readAccountsByNameData(String name) {
+    ReadAccountsByNameDataRequest request = ReadAccountsByNameDataRequest.newBuilder()
+        .setName(name)
+        .build();
+
+    return stub.readAccountsByNameData(request);
+  }
+
   // ---------- Pega todo valor do banco e retorna em R$ ou seja lá qual moeda
   // ----------
   public long readTotalBankMoneyData() {

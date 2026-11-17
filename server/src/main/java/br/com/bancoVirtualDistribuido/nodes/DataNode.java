@@ -389,6 +389,21 @@ public class DataNode implements Receiver {
     }
   }
 
+  public List<BankAccount> readAccountsByName(String name) {
+    currentLoad.incrementAndGet();
+    try {
+      String qLower = name.toLowerCase();
+      synchronized (accountsMap) {
+        return accountsMap.values().stream()
+            // pesquisa se há tal nome
+            .filter(acc -> !acc.getIsDeleted() && acc.getUser() != null && acc.getUser().toLowerCase().contains(qLower))
+            .collect(Collectors.toList());
+      }
+    } finally {
+      currentLoad.decrementAndGet();
+    }
+  }
+
   public boolean verifyCredentials(String id, String password) {
     currentLoad.incrementAndGet();
     try {
@@ -1203,6 +1218,56 @@ public class DataNode implements Receiver {
       responseObserver.onNext(response);
       responseObserver.onCompleted();
 
+    }
+
+    @Override
+    public void readAccountsByNameData(
+        ReadAccountsByNameDataRequest request,
+        StreamObserver<ReadAccountsByNameDataResponse> responseObserver) {
+
+      if (!clusterReady) {
+        responseObserver.onNext(ReadAccountsByNameDataResponse.newBuilder().build());
+        responseObserver.onCompleted();
+        return;
+      }
+
+      String nameQuery = request.getName();
+      List<BankAccount> matches = new ArrayList<>();
+      Address targetNode = getLeastLoadedNode();
+
+      try {
+        if (targetNode.equals(channel.getAddress())) {
+          matches = DataNode.this.readAccountsByName(nameQuery);
+        } else {
+          MethodCall call = new MethodCall(
+              "searchAccountsByName",
+              new Object[] { nameQuery },
+              new Class[] { String.class });
+
+          matches = dispatcher.callRemoteMethod(
+              targetNode,
+              call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+        }
+      } catch (Exception e) {
+        matches = DataNode.this.readAccountsByName(nameQuery);
+      }
+
+      ReadAccountsByNameDataResponse.Builder responseBuilder = ReadAccountsByNameDataResponse.newBuilder();
+
+      if (matches != null) {
+        for (BankAccount acc : matches) {
+          Account summary = Account.newBuilder()
+              .setUser(acc.getUser())
+              .setCpf(acc.getCpf())
+              .build();
+
+          responseBuilder.addAccounts(summary);
+        }
+      }
+
+      responseObserver.onNext(responseBuilder.build());
+      responseObserver.onCompleted();
     }
   }
 

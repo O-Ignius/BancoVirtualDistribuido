@@ -238,6 +238,15 @@ public class ControlNode implements Receiver {
     }
   }
 
+  public ReadAccountsByNameDataResponse fetchAccountsByNameFromData(String name) {
+    currentLoad.incrementAndGet();
+    try {
+      return dataClient.readAccountsByNameData(name);
+    } finally {
+      currentLoad.decrementAndGet();
+    }
+  }
+
   public ReadAccountDataResponse fetchAccountFromData(String cpf) {
     currentLoad.incrementAndGet();
     try {
@@ -516,6 +525,53 @@ public class ControlNode implements Receiver {
       }
     }
 
+    @Override
+    public void searchAccountsByNameService(
+        br.com.bancoVirtualDistribuido.grpc.service.SearchAccountsByNameServiceRequest request,
+        io.grpc.stub.StreamObserver<br.com.bancoVirtualDistribuido.grpc.service.SearchAccountsByNameServiceResponse> responseObserver) {
+
+      try {
+        String nameQuery = request.getName();
+        Address target = getLeastLoadedNode();
+        br.com.bancoVirtualDistribuido.grpc.data.ReadAccountsByNameDataResponse dataResponse;
+
+        if (target.equals(channel.getAddress())) {
+          dataResponse = ControlNode.this.fetchAccountsByNameFromData(nameQuery);
+        } else {
+          MethodCall call = new MethodCall(
+              "fetchAccountsByNameFromData",
+              new Object[] { nameQuery },
+              new Class[] { String.class });
+
+          dataResponse = dispatcher.callRemoteMethod(
+              target,
+              call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+        }
+
+        br.com.bancoVirtualDistribuido.grpc.service.SearchAccountsByNameServiceResponse.Builder responseBuilder = br.com.bancoVirtualDistribuido.grpc.service.SearchAccountsByNameServiceResponse
+            .newBuilder();
+
+        for (br.com.bancoVirtualDistribuido.grpc.data.Account dataAcc : dataResponse.getAccountsList()) {
+          br.com.bancoVirtualDistribuido.grpc.service.Account serviceAcc = br.com.bancoVirtualDistribuido.grpc.service.Account
+              .newBuilder()
+              .setUser(dataAcc.getUser())
+              .setCpf(dataAcc.getCpf())
+              .build();
+
+          responseBuilder.addAccounts(serviceAcc);
+        }
+
+        responseObserver.onNext(responseBuilder.build());
+        responseObserver.onCompleted();
+
+      } catch (Exception e) {
+        System.err.println("[ControlNode] Erro ao pesquisar contas por nome: " + e.getMessage());
+        responseObserver.onNext(
+            br.com.bancoVirtualDistribuido.grpc.service.SearchAccountsByNameServiceResponse.newBuilder().build());
+        responseObserver.onCompleted();
+      }
+    }
   }
 
   public static void main(String[] args) throws Exception {

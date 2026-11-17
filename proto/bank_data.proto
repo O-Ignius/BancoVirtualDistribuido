@@ -33,6 +33,10 @@ service BankDataService {
     rpc SaveAccountData(SaveAccountDataRequest)
         returns (SaveAccountDataResponse);
 
+    // persiste uma conta
+    rpc ReadAccountsByNameData(ReadAccountsByNameDataRequest)
+        returns (ReadAccountsByNameDataResponse);
+
 //----------Conta
 //
 //----------transferência
@@ -63,6 +67,23 @@ service BankDataService {
 // ==============================
 message ReadTotalBankMoneyDataResponse {
     uint64 total_money = 1;
+}
+
+//tipo conta
+message Account{
+    string user = 1;
+    string cpf = 2;
+}
+
+// ==============================
+// le conta a partir do nome
+// ==============================
+message ReadAccountsByNameDataRequest {
+    string name = 1;
+}
+
+message ReadAccountsByNameDataResponse {
+    repeated Account accounts = 1;
 }
 
 // ==============================
