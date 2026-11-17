@@ -8,6 +8,7 @@ option java_outer_classname = "BankServiceProto";
 
 // import de tipo
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 service BankService {
 
@@ -47,6 +48,17 @@ service BankService {
         returns (SaveTransferServiceResponse);
 
   // -------Transferencias
+  //
+  //----------others
+    rpc GetTotalBankMoneyService(google.protobuf.Empty)
+        returns (GetTotalBankMoneyServiceResponse);
+}
+
+// ==============================
+// Retorna total de dinheiro no banco
+// ==============================
+message GetTotalBankMoneyServiceResponse {
+    uint64 total_money = 1;
 }
 
 // ==============================

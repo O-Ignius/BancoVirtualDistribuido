@@ -8,6 +8,7 @@ option java_outer_classname = "BankDataProto";
 
 // import de tipo
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 service BankDataService {
 //----------Conta
@@ -51,6 +52,17 @@ service BankDataService {
     rpc SaveTransferData(SaveTransferDataRequest)
         returns (SaveTransferDataResponse);
 //----------transferência
+//
+//----------others
+    rpc ReadTotalBankMoneyData(google.protobuf.Empty)
+        returns (ReadTotalBankMoneyDataResponse);
+}
+
+// ==============================
+// Retorna total de dinheiro no banco
+// ==============================
+message ReadTotalBankMoneyDataResponse {
+    uint64 total_money = 1;
 }
 
 // ==============================

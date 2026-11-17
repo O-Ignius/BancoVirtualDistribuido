@@ -38,6 +38,8 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
 
+import com.google.protobuf.Empty;
+
 public class DataNode implements Receiver {
 
   private JChannel channel;
@@ -1172,6 +1174,35 @@ public class DataNode implements Receiver {
 
       responseObserver.onNext(responseBuilder.build());
       responseObserver.onCompleted();
+    }
+
+    // lê da RAM do coordenador
+    @Override
+    public void readTotalBankMoneyData(
+        Empty request,
+        StreamObserver<ReadTotalBankMoneyDataResponse> responseObserver) {
+
+      if (!clusterReady) {
+        responseObserver.onNext(ReadTotalBankMoneyDataResponse.newBuilder().build());
+        responseObserver.onCompleted();
+        return;
+      }
+
+      double total = 0;
+
+      synchronized (accountsMap) {
+
+        total = accountsMap.values().stream()
+            .mapToDouble(BankAccount::getBalance)
+            .sum();
+      }
+
+      ReadTotalBankMoneyDataResponse response = ReadTotalBankMoneyDataResponse.newBuilder()
+          .setTotalMoney((long) (total * 100)).build();
+
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+
     }
   }
 

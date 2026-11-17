@@ -6,6 +6,8 @@ import br.com.bancoVirtualDistribuido.grpc.data.*;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 
+import com.google.protobuf.Empty;
+
 public class DataNodeClient {
 
   private final ManagedChannel channel;
@@ -28,6 +30,16 @@ public class DataNodeClient {
     if (channel != null && !channel.isShutdown()) {
       channel.shutdown();
     }
+  }
+
+  // ---------- Pega todo valor do banco e retorna em R$ ou seja lá qual moeda
+  // ----------
+  public long readTotalBankMoneyData() {
+    Empty request = Empty.getDefaultInstance();
+
+    ReadTotalBankMoneyDataResponse response = stub.readTotalBankMoneyData(request);
+
+    return response.getTotalMoney();
   }
 
   // ---------- Verificação de credenciais ----------

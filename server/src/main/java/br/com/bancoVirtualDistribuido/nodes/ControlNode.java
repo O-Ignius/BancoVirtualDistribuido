@@ -229,6 +229,15 @@ public class ControlNode implements Receiver {
     }
   }
 
+  public long fetchTotalBankMoney() {
+    currentLoad.incrementAndGet();
+    try {
+      return dataClient.readTotalBankMoneyData();
+    } finally {
+      currentLoad.decrementAndGet();
+    }
+  }
+
   public ReadAccountDataResponse fetchAccountFromData(String cpf) {
     currentLoad.incrementAndGet();
     try {
@@ -465,6 +474,48 @@ public class ControlNode implements Receiver {
         responseObserver.onCompleted();
       }
     }
+
+    @Override
+    public void getTotalBankMoneyService(
+        com.google.protobuf.Empty request,
+        io.grpc.stub.StreamObserver<GetTotalBankMoneyServiceResponse> responseObserver) {
+
+      try {
+        Address target = getLeastLoadedNode();
+        long totalMoney;
+
+        if (target.equals(channel.getAddress())) {
+          totalMoney = ControlNode.this.fetchTotalBankMoney();
+        } else {
+          System.out.println("[" + nodeName + "] Delegando leitura do montante total para: " + target);
+          MethodCall call = new MethodCall(
+              "fetchTotalBankMoney",
+              new Object[] {},
+              new Class[] {});
+
+          Long res = dispatcher.callRemoteMethod(
+              target,
+              call,
+              MyRpcOptions.getFirst().setTimeout(Constants.timeOut));
+
+          totalMoney = (res != null) ? res : 0L;
+        }
+
+        GetTotalBankMoneyServiceResponse response = GetTotalBankMoneyServiceResponse.newBuilder()
+            .setTotalMoney(totalMoney)
+            .build();
+
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+
+      } catch (Exception e) {
+        System.err.println("[ControlNode] Erro ao buscar montante total no DataNode: " + e.getMessage());
+
+        responseObserver.onNext(GetTotalBankMoneyServiceResponse.newBuilder().build());
+        responseObserver.onCompleted();
+      }
+    }
+
   }
 
   public static void main(String[] args) throws Exception {
