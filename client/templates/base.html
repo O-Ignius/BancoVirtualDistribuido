@@ -27,37 +27,61 @@
     {% block conteudo %}{% endblock %}
   </main>
 
-  <footer class="rodape" id="auditoria">
+<footer class="rodape" id="auditoria">
     <span class="rotulo">Auditoria</span>
     {% if montante %}
-      {% set esperado = montante.contas * 100000 %}
       <span>Montante: <strong data-campo="total">{{ montante.total_centavos | reais }}</strong></span>
-      <span>Contas: <strong data-campo="contas">{{ montante.contas }}</strong></span>
-      <span>Esperado: <strong data-campo="esperado">{{ esperado | reais }}</strong></span>
-      <span class="selo {{ 'ok' if montante.total_centavos == esperado else 'falha' }}" data-campo="selo">
-        {{ 'consistente' if montante.total_centavos == esperado else 'DIVERGENTE' }}
-      </span>
+      {% if montante.contas is not none %}
+        {% set esperado = montante.contas * 100000 %}
+        <span>Contas: <strong data-campo="contas">{{ montante.contas }}</strong></span>
+        <span>Esperado: <strong data-campo="esperado">{{ esperado | reais }}</strong></span>
+        <span class="selo {{ 'ok' if montante.total_centavos == esperado else 'falha' }}" data-campo="selo">
+          {{ 'consistente' if montante.total_centavos == esperado else 'DIVERGENTE' }}
+        </span>
+      {% endif %}
     {% else %}
       <span class="indisponivel">montante indisponível no servidor</span>
     {% endif %}
+
+    <button type="button" id="btn-atualizar-montante" class="secundario-btn" onclick="atualizarAuditoria(true)">
+      Atualizar
+    </button>
   </footer>
 
   <script>
-    // Atualiza o rodapé de auditoria periodicamente, sem recarregar a página.
-    setInterval(async () => {
+    async function atualizarAuditoria(manual = false) {
+      const btn = document.getElementById("btn-atualizar-montante");
+      if (manual && btn) {
+        btn.disabled = true;
+        btn.textContent = "Atualizando...";
+      }
+
       try {
         const m = await (await fetch("{{ url_for('api_montante') }}")).json();
         if (!m) return;
         const rodape = document.getElementById("auditoria");
         const campo = (nome) => rodape.querySelector(`[data-campo="${nome}"]`);
         if (!campo("total")) return location.reload();
+
         campo("total").textContent = m.total;
-        campo("contas").textContent = m.contas;
-        campo("esperado").textContent = m.esperado;
-        campo("selo").textContent = m.consistente ? "consistente" : "DIVERGENTE";
-        campo("selo").className = "selo " + (m.consistente ? "ok" : "falha");
-      } catch (_) { /* servidor fora do ar: mantém o último valor */ }
-    }, 3000);
+        if (m.contas !== null && campo("contas")) {
+          campo("contas").textContent = m.contas;
+          campo("esperado").textContent = m.esperado;
+          campo("selo").textContent = m.consistente ? "consistente" : "DIVERGENTE";
+          campo("selo").className = "selo " + (m.consistente ? "ok" : "falha");
+        }
+      } catch (_) {
+        /* servidor fora do ar: mantém o último valor */
+      } finally {
+        if (manual && btn) {
+          btn.disabled = false;
+          btn.textContent = "Atualizar";
+        }
+      }
+    }
+
+    // Atualiza o rodapé de auditoria periodicamente, sem recarregar a página.
+    setInterval(() => atualizarAuditoria(false), 3000);
   </script>
 </body>
 </html>

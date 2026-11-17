@@ -202,12 +202,20 @@ def api_montante():
     m = obter_montante()
     if m is None:
         return jsonify(None)
+
+    contas = m.get("contas")
     return jsonify(
         {
             "total": formatar_reais(m["total_centavos"]),
-            "contas": m["contas"],
-            "esperado": formatar_reais(m["contas"] * 100_000),
-            "consistente": m["total_centavos"] == m["contas"] * 100_000,
+            "contas": contas,
+            "esperado": (
+                formatar_reais(contas * 100_000) if contas is not None else None
+            ),
+            "consistente": (
+                (m["total_centavos"] == contas * 100_000)
+                if contas is not None
+                else True
+            ),
         }
     )
 

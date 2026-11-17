@@ -22,7 +22,14 @@
           {% for r in resultados %}
             <li>
               <span>{{ r.nome }} <small>{{ r.cpf | cpf }}</small></span>
-              <a href="{{ url_for('painel', destino=r.cpf) }}#transferir">Selecionar</a>
+              <button
+                type="button"
+                class="secundario-btn"
+                data-cpf="{{ r.cpf }}"
+                data-nome="{{ r.nome }}"
+                onclick="selecionarDestinatario(this)">
+                Selecionar
+              </button>
             </li>
           {% endfor %}
         </ul>
@@ -33,11 +40,13 @@
 
     <form method="post" action="{{ url_for('transferir') }}">
       <label>CPF do destinatário
-        <input name="destino" value="{{ destino | cpf if destino }}" inputmode="numeric" placeholder="000.000.000-00" required>
+        <input id="input-destino" name="destino" value="{{ destino | cpf if destino }}" inputmode="numeric" placeholder="000.000.000-00" required>
       </label>
-      {% if nome_destino %}<p class="destino">Para: <strong>{{ nome_destino }}</strong></p>{% endif %}
+      <p class="destino" id="label-destino" {% if not nome_destino %}style="display: none;"{% endif %}>
+        Para: <strong id="nome-destino">{{ nome_destino or '' }}</strong>
+      </p>
       <label>Valor (R$)
-        <input name="valor" inputmode="decimal" placeholder="0,00" required>
+        <input id="input-valor" name="valor" inputmode="decimal" placeholder="0,00" required>
       </label>
       <button type="submit">Transferir</button>
     </form>
@@ -66,4 +75,20 @@
     {% endif %}
   </section>
 </div>
+
+<script>
+  function selecionarDestinatario(botao) {
+    const cpf = botao.dataset.cpf || "";
+    const nome = botao.dataset.nome || "";
+    const digitos = cpf.replace(/\D/g, "");
+    const cpfFormatado = digitos.length === 11
+      ? digitos.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+      : cpf;
+
+    document.getElementById("input-destino").value = cpfFormatado;
+    document.getElementById("nome-destino").textContent = nome;
+    document.getElementById("label-destino").style.display = "block";
+    document.getElementById("input-valor").focus();
+  }
+</script>
 {% endblock %}

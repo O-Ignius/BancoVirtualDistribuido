@@ -11,6 +11,7 @@ import os
 import threading
 import uuid
 from datetime import datetime
+from google.protobuf import empty_pb2
 
 # Valores monetários são sempre inteiros em centavos.
 SALDO_INICIAL_CENTAVOS = 100_000  # R$ 1.000,00
@@ -218,14 +219,21 @@ class BancoGrpc:
         ]
 
     def buscar_por_nome(self, termo):
-        raise OperacaoNaoSuportada(
-            "Falta um RPC de busca por nome no bank_service.proto."
+        resp = self._chamar(
+            self._stub.SearchAccountsByNameService,
+            self._pb.SearchAccountsByNameServiceRequest(name=termo),
         )
+        return [{"cpf": conta.cpf, "nome": conta.user} for conta in resp.accounts]
 
     def montante(self):
-        raise OperacaoNaoSuportada(
-            "Falta um RPC de montante total no bank_service.proto."
+        resp = self._chamar(
+            self._stub.GetTotalBankMoneyService,
+            empty_pb2.Empty(),
         )
+        return {
+            "total_centavos": resp.total_money,
+            "contas": getattr(resp, "total_accounts", None),
+        }
 
 
 def criar_banco():
