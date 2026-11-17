@@ -3,6 +3,8 @@ package br.com.bancoVirtualDistribuido.gateway;
 import br.com.bancoVirtualDistribuido.grpc.service.*;
 import io.grpc.stub.StreamObserver;
 
+import com.google.protobuf.Empty;
+
 public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
 
   // Stub bloqueante para comunicação Gateway -> Controle
@@ -10,6 +12,38 @@ public class RequestProcessor extends BankServiceGrpc.BankServiceImplBase {
 
   public RequestProcessor(BankServiceGrpc.BankServiceBlockingStub controlStub) {
     this.controlStub = controlStub;
+  }
+
+  @Override
+  public void searchAccountsByNameService(SearchAccountsByNameServiceRequest request,
+      StreamObserver<SearchAccountsByNameServiceResponse> responseObserver) {
+    try {
+      SearchAccountsByNameServiceResponse response = controlStub.searchAccountsByNameService(request);
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    } catch (Exception e) {
+      System.err.println("[Gateway] Erro ao conectar com Controle: " +
+          e.getMessage());
+      responseObserver.onError(io.grpc.Status.UNAVAILABLE
+          .withDescription("Serviço de Controle indisponível.")
+          .asRuntimeException());
+    }
+  }
+
+  @Override
+  public void getTotalBankMoneyService(Empty request,
+      StreamObserver<GetTotalBankMoneyServiceResponse> responseObserver) {
+    try {
+      GetTotalBankMoneyServiceResponse response = controlStub.getTotalBankMoneyService(request);
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    } catch (Exception e) {
+      System.err.println("[Gateway] Erro ao conectar com Controle: " +
+          e.getMessage());
+      responseObserver.onError(io.grpc.Status.UNAVAILABLE
+          .withDescription("Serviço de Controle indisponível.")
+          .asRuntimeException());
+    }
   }
 
   @Override
