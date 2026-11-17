@@ -29,7 +29,7 @@ public final class Constants {
   public static final String controlServerIp = "localhost";
 
   // configs para minimo de servidores e tempo de espera para esses minimos
-  public static final int minDataNodesCluster = 3;
+  public static final int minDataNodesCluster = 1;
   public static final int timeOutWaitClusters = 3000; // ms
 
   // função para constante jGroups

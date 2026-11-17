@@ -1273,8 +1273,8 @@ public class DataNode implements Receiver {
 
   public static void main(String[] args) throws Exception {
     String name = "DataNode{" + UUID.randomUUID().toString() + "}";
-    String accountsPath = Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
-    String transfersPath = Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
+    String accountsPath = null;
+    String transfersPath = null;
     int nodePort = Constants.DATA_NODE_PORT;
 
     // Passa nome do nó e caminhos dos arquivos de persistência
@@ -1293,6 +1293,8 @@ public class DataNode implements Receiver {
 
       }
     }
+    accountsPath = Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
+    transfersPath = Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
 
     DataNode node = new DataNode(
         name,
