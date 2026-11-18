@@ -4,6 +4,7 @@ import br.com.bancoVirtualDistribuido.model.*;
 import br.com.bancoVirtualDistribuido.service.*;
 import br.com.bancoVirtualDistribuido.config.Constants;
 import br.com.bancoVirtualDistribuido.config.MyRpcOptions;
+import br.com.bancoVirtualDistribuido.config.BroadcastConnector;
 
 import org.jgroups.JChannel;
 import org.jgroups.MergeView;
@@ -60,6 +61,8 @@ public class DataNode implements Receiver {
 
   // int atomico para gerenciar total de processos que nó está executando
   private final AtomicInteger currentLoad = new AtomicInteger(0);
+
+  private final BroadcastConnector broadcaster = new BroadcastConnector();
 
   private volatile boolean clusterReady = false; // impede operações antes de sincronizar
 
@@ -262,6 +265,10 @@ public class DataNode implements Receiver {
             .addService(new DataNodeGrpcServiceImpl())
             .build()
             .start();
+
+        // após build do servidor grpc, começa a anúnciá-lo
+        broadcaster.start("DATA", grpcPort);
+
         System.out.println("[" + nodeName + "] SOU O COORDENADOR! Servidor gRPC escutando na porta " + grpcPort);
       } catch (Exception e) {
         System.err.println("[" + nodeName + "] Erro ao iniciar servidor gRPC: " + e.getMessage());
@@ -584,6 +591,8 @@ public class DataNode implements Receiver {
   }
 
   public void stop() {
+    // para anuncio do multicast de gRPC
+    broadcaster.stop();
 
     if (grpcServer != null) {
       grpcServer.shutdown();

@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import br.com.bancoVirtualDistribuido.config.Constants;
 import br.com.bancoVirtualDistribuido.config.MyRpcOptions;
+import br.com.bancoVirtualDistribuido.config.BroadcastConnector;
 import br.com.bancoVirtualDistribuido.grpc.data.*;
 import br.com.bancoVirtualDistribuido.grpc.service.*;
 
@@ -42,6 +43,8 @@ public class ControlNode implements Receiver {
   private final Set<String> loggedClients = new HashSet<>();
 
   private final AtomicInteger currentLoad = new AtomicInteger(0);
+
+  private final BroadcastConnector broadcaster = new BroadcastConnector();
 
   public ControlNode(String nodeName) {
     this.nodeName = nodeName;
@@ -95,6 +98,10 @@ public class ControlNode implements Receiver {
             .addService(new ControlNodeGrpcServiceImpl())
             .build()
             .start();
+
+        // após build do servidor grpc, começa a anúnciá-lo
+        broadcaster.start("DATA", grpcPort);
+
         System.out.println("[" + nodeName + "] COORDENADOR DE CONTROLE: Escutando Gateway na porta " + grpcPort);
       } catch (Exception e) {
         System.err.println("[" + nodeName + "] Erro ao iniciar servidor gRPC: " + e.getMessage());
@@ -266,6 +273,8 @@ public class ControlNode implements Receiver {
   }
 
   public void stop() {
+    // para anuncio do multicast de gRPC
+    broadcaster.stop();
     if (grpcServer != null) {
       grpcServer.shutdown();
     }

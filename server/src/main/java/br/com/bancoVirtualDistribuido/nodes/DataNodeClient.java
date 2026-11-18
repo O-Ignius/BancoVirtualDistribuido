@@ -1,6 +1,7 @@
 package br.com.bancoVirtualDistribuido.nodes;
 
 import br.com.bancoVirtualDistribuido.config.Constants;
+import br.com.bancoVirtualDistribuido.config.ServiceDiscovery;
 import br.com.bancoVirtualDistribuido.grpc.data.*;
 
 import io.grpc.ManagedChannel;
@@ -14,16 +15,27 @@ public class DataNodeClient {
   private final BankDataServiceGrpc.BankDataServiceBlockingStub stub;
 
   public DataNodeClient() {
+    reconnect();
+  }
+
+  public synchronized void reconnect() throws Exception {
+    if (channel != null && !channel.isShutdown()) {
+      channel.shutdownNow();
+    }
+
+    System.out.println("[DataNodeClient] Buscando DataNode coordenador via Multicast...");
+    String[] endpoint = ServiceDiscovery.discover("DATA");
+    String host = endpoint[0];
+    int port = Integer.parseInt(endpoint[1]);
+
     this.channel = ManagedChannelBuilder
-        .forAddress(Constants.dataServerIp, Constants.DATA_NODE_PORT)
+        .forAddress(host, port)
         .usePlaintext()
         .build();
 
     this.stub = BankDataServiceGrpc.newBlockingStub(channel);
 
-    System.out.println(
-        "[DataNodeClient] Conectado ao DataNode em "
-            + Constants.dataServerIp + " :" + Constants.DATA_NODE_PORT);
+    System.out.println("[DataNodeClient] Conectado ao DataNode em " + host + ":" + port);
   }
 
   public void shutdown() {
