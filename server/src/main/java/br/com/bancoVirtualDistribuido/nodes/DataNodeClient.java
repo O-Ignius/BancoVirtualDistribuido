@@ -11,10 +11,10 @@ import com.google.protobuf.Empty;
 
 public class DataNodeClient {
 
-  private final ManagedChannel channel;
-  private final BankDataServiceGrpc.BankDataServiceBlockingStub stub;
+  private ManagedChannel channel;
+  private BankDataServiceGrpc.BankDataServiceBlockingStub stub;
 
-  public DataNodeClient() {
+  public DataNodeClient() throws Exception {
     reconnect();
   }
 
@@ -38,6 +38,23 @@ public class DataNodeClient {
     System.out.println("[DataNodeClient] Conectado ao DataNode em " + host + ":" + port);
   }
 
+  private <T> T callWithFailover(java.util.function.Supplier<T> rpcCall) {
+    try {
+      return rpcCall.get();
+    } catch (io.grpc.StatusRuntimeException e) {
+      if (e.getStatus().getCode() == io.grpc.Status.Code.UNAVAILABLE) {
+        System.err.println("[DataNodeClient] DataNode indisponível. Redescobrindo novo coordenador...");
+        try {
+          reconnect();
+          return rpcCall.get();
+        } catch (Exception ex) {
+          throw new RuntimeException("Falha ao reconectar ao novo DataNode coordenador", ex);
+        }
+      }
+      throw e;
+    }
+  }
+
   public void shutdown() {
     if (channel != null && !channel.isShutdown()) {
       channel.shutdown();
@@ -50,7 +67,7 @@ public class DataNodeClient {
         .setName(name)
         .build();
 
-    return stub.readAccountsByNameData(request);
+    return callWithFailover(() -> stub.readAccountsByNameData(request));
   }
 
   // ---------- Pega todo valor do banco e retorna em R$ ou seja lá qual moeda
@@ -58,7 +75,7 @@ public class DataNodeClient {
   public long readTotalBankMoneyData() {
     Empty request = Empty.getDefaultInstance();
 
-    ReadTotalBankMoneyDataResponse response = stub.readTotalBankMoneyData(request);
+    ReadTotalBankMoneyDataResponse response = callWithFailover(() -> stub.readTotalBankMoneyData(request));
 
     return response.getTotalMoney();
   }
@@ -72,7 +89,7 @@ public class DataNodeClient {
         .setPassword(password)
         .build();
 
-    VerifyCredentialsDataResponse response = stub.verifyCredentialsData(request);
+    VerifyCredentialsDataResponse response = callWithFailover(() -> stub.verifyCredentialsData(request));
 
     return response.getSuccess();
   }
@@ -85,7 +102,7 @@ public class DataNodeClient {
         .setCpf(cpf)
         .build();
 
-    return stub.readAccountData(request);
+    return callWithFailover(() -> stub.readAccountData(request));
   }
 
   // ---------- Leitura de transferencias ----------
@@ -95,7 +112,7 @@ public class DataNodeClient {
         .setCpf(cpf)
         .build();
 
-    return stub.getTransferData(request);
+    return callWithFailover(() -> stub.getTransferData(request));
   }
 
   // ---------- Salvamento de conta ----------
@@ -110,10 +127,10 @@ public class DataNodeClient {
         .setCpf(cpf)
         .setOwner(owner)
         .setPassword(password)
-        .setBalanceCents((long) (balance * 100))
+        .setBalanceCents(Math.round(balance * 100))
         .build();
 
-    SaveAccountDataResponse response = stub.saveAccountData(request);
+    SaveAccountDataResponse response = callWithFailover(() -> stub.saveAccountData(request));
 
     return response.getSuccess();
   }
@@ -133,7 +150,7 @@ public class DataNodeClient {
         .setAmountCents((long) (amount * 100))
         .build();
 
-    SaveTransferDataResponse response = stub.saveTransferData(request);
+    SaveTransferDataResponse response = callWithFailover(() -> stub.saveTransferData(request));
 
     return response.getSuccess();
   }
@@ -150,14 +167,14 @@ public class DataNodeClient {
         .setCpf(idSource)
         .build();
 
-    ReadAccountDataResponse sourceResponse = stub.readAccountData(sourceRequest);
+    ReadAccountDataResponse sourceResponse = callWithFailover(() -> stub.readAccountData(sourceRequest));
 
     // Busca saldo da conta de destino
     ReadAccountDataRequest destinyRequest = ReadAccountDataRequest.newBuilder()
         .setCpf(idDestiny)
         .build();
 
-    ReadAccountDataResponse destinyResponse = stub.readAccountData(destinyRequest);
+    ReadAccountDataResponse destinyResponse = callWithFailover(() -> stub.readAccountData(destinyRequest));
 
     if (!sourceResponse.getFound() || !destinyResponse.getFound()) {
       return false;
@@ -178,7 +195,7 @@ public class DataNodeClient {
             sourceResponse.getBalanceCents() - amountCents)
         .build();
 
-    boolean sourceSuccess = stub.saveAccountData(saveSource).getSuccess();
+    boolean sourceSuccess = callWithFailover(() -> stub.saveAccountData(saveSource).getSuccess());
 
     if (!sourceSuccess) {
       return false;
@@ -192,7 +209,19 @@ public class DataNodeClient {
             destinyResponse.getBalanceCents() + amountCents)
         .build();
 
-    boolean destinySuccess = stub.saveAccountData(saveDestiny).getSuccess();
+    boolean destinySuccess = callWithFailover(() -> stub.saveAccountData(saveDestiny)).getSuccess();
+
+    // se falhar o destino, estorna o valor
+    if (!destinySuccess) {
+      SaveAccountDataRequest estorno = SaveAccountDataRequest.newBuilder()
+          .setCpf(sourceResponse.getCpf())
+          .setOwner(sourceResponse.getOwner())
+          .setBalanceCents(sourceResponse.getBalanceCents()) // saldo original antes do débito
+          .build();
+
+      callWithFailover(() -> stub.saveAccountData(estorno));
+      return false;
+    }
 
     return destinySuccess;
   }
