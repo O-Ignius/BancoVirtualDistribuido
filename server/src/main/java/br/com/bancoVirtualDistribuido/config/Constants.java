@@ -24,9 +24,14 @@ public final class Constants {
   public static final int CONTROL_NODE_PORT = 50051;
   public static final int DATA_NODE_PORT = 50052;
 
-  // servers ip
+  // ips fixos
   public static final String dataServerIp = "localhost";
   public static final String controlServerIp = "localhost";
+
+  // ips de broadcast para descoberta de gateway e coordenadores
+  public static final String DISCOVERY_MULTICAST_GROUP = "229.0.0.1";
+  public static final int DISCOVERY_MULTICAST_PORT = 4446;
+  public static final int sleepMulticastDiscover = 2000;// ms
 
   // configs para minimo de servidores e tempo de espera para esses minimos
   public static final int minDataNodesCluster = 1;
