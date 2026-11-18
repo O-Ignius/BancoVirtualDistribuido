@@ -463,6 +463,7 @@ public class ControlNode implements Receiver {
               .setSource(dataTransfer.getSource())
               .setDestiny(dataTransfer.getDestiny())
               .setAmountCents(dataTransfer.getAmountCents())
+              .setCreatedAt(dataTransfer.getCreatedAt())
               .build();
 
           // Adiciona na lista da resposta usando o método singular gerado pelo gRPC

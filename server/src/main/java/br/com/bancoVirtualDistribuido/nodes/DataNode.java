@@ -38,6 +38,7 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
 
+import com.google.protobuf.Timestamp;
 import com.google.protobuf.Empty;
 
 public class DataNode implements Receiver {
@@ -471,7 +472,8 @@ public class DataNode implements Receiver {
     }
   }
 
-  public void replicateSaveTransfer(String transferId, String sourceCpf, String destCpf, double amount) {
+  public void replicateSaveTransfer(String transferId, String sourceCpf, String destCpf, double amount,
+      Instant timestamp) {
     currentLoad.incrementAndGet();
     try {
       synchronized (transfersMap) {
@@ -481,7 +483,7 @@ public class DataNode implements Receiver {
               sourceCpf,
               destCpf,
               amount,
-              Instant.now());
+              timestamp);
           transfersMap.put(transferId, newTransfer);
           transferService.saveAll(transfersMap.values());
 
@@ -1025,6 +1027,7 @@ public class DataNode implements Receiver {
       double amount = request.getAmountCents() / 100.0;
       String source = request.getSourceCpf();
       String dest = request.getDestinationCpf();
+      Instant timestamp = Instant.now();
 
       boolean isSuccess = false;
 
@@ -1034,8 +1037,8 @@ public class DataNode implements Receiver {
         // tenta com que os nós executem a replicação da transferência
         MethodCall call = new MethodCall(
             "replicateSaveTransfer",
-            new Object[] { transferId, source, dest, amount },
-            new Class[] { String.class, String.class, String.class, double.class });
+            new Object[] { transferId, source, dest, amount, timestamp },
+            new Class[] { String.class, String.class, String.class, double.class, Instant.class });
 
         // pega as respostas dos nós
         RspList<Object> answers = dispatcher.callRemoteMethods(null, call, syncOptions);
@@ -1176,11 +1179,19 @@ public class DataNode implements Receiver {
 
       if (transfers != null) {
         for (BankTransfer t : transfers) {
+          Instant ts = t.getTimestamp() != null ? t.getTimestamp() : Instant.now();
+
+          Timestamp createdAt = Timestamp.newBuilder()
+              .setSeconds(ts.getEpochSecond())
+              .setNanos(ts.getNano())
+              .build();
+
           Transfer grpcTransfer = Transfer.newBuilder()
               .setTransferId(t.getUUId())
               .setSource(t.getSource())
               .setDestiny(t.getDestiny())
-              .setAmountCents((long) (t.getAmount() * 100))
+              .setAmountCents(Math.round(t.getAmount() * 100))
+              .setCreatedAt(createdAt)
               .build();
 
           responseBuilder.addTransfer(grpcTransfer);
@@ -1240,7 +1251,7 @@ public class DataNode implements Receiver {
           matches = DataNode.this.readAccountsByName(nameQuery);
         } else {
           MethodCall call = new MethodCall(
-              "searchAccountsByName",
+              "readAccountsByName",
               new Object[] { nameQuery },
               new Class[] { String.class });
 
@@ -1281,20 +1292,21 @@ public class DataNode implements Receiver {
     //
     if (args.length > 0) {
       name = args[0];
-
-      if (args.length > 1) {
-        accountsPath = Constants.accountsDatabaseFolder + args[1];
-      }
-      if (args.length > 2) {
-        transfersPath = Constants.transfersDatabaseFolder + args[2];
-      }
-      if (args.length > 3) {
-        nodePort = Integer.parseInt(args[3]);
-
-      }
     }
+
     accountsPath = Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
     transfersPath = Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
+
+    if (args.length > 1) {
+      accountsPath = Constants.accountsDatabaseFolder + args[1];
+    }
+    if (args.length > 2) {
+      transfersPath = Constants.transfersDatabaseFolder + args[2];
+    }
+    if (args.length > 3) {
+      nodePort = Integer.parseInt(args[3]);
+
+    }
 
     DataNode node = new DataNode(
         name,
