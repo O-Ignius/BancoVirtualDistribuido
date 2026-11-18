@@ -440,32 +440,28 @@ public class DataNode implements Receiver {
 
   // REPLICAÇÃO DE INFORMAÇÃO
 
-  public void replicateSaveAccount(String accountId, String owner, String password, double balance) {
+  public void replicateSaveAccount(String accountId, String owner, String password, double balance) throws Exception {
     currentLoad.incrementAndGet();
     try {
       synchronized (accountsMap) {
-        try {
-          BankAccount account = accountsMap.get(accountId);
-          if (account == null) {
-            account = new BankAccount();
-            account.setCpf(accountId);
+        BankAccount account = accountsMap.get(accountId);
+        if (account == null) {
+          account = new BankAccount();
+          account.setCpf(accountId);
+          account.setPassword(password);
+          account.setUser(owner);
+        } else {
+          account.setUser(owner);
+          if (password != null && !password.isEmpty()) {
             account.setPassword(password);
-            account.setUser(owner);
-          } else {
-            account.setUser(owner);
-            if (password != null && !password.isEmpty()) {
-              account.setPassword(password);
-            }
           }
-          account.setBalance(balance);
-
-          accountsMap.put(accountId, account);
-          accountService.saveAll(accountsMap.values()); // Salva no JSON
-
-          System.out.println("[" + nodeName + "] Conta " + accountId + " replicada e salva com sucesso.");
-        } catch (Exception e) {
-          System.err.println("[" + nodeName + "] Erro ao replicar conta: " + e.getMessage());
         }
+        account.setBalance(balance);
+
+        accountsMap.put(accountId, account);
+        accountService.saveAll(accountsMap.values()); // Salva no JSON
+
+        System.out.println("[" + nodeName + "] Conta " + accountId + " replicada e salva com sucesso.");
       }
     } finally {
       currentLoad.decrementAndGet();
@@ -473,24 +469,27 @@ public class DataNode implements Receiver {
   }
 
   public void replicateSaveTransfer(String transferId, String sourceCpf, String destCpf, double amount,
-      Instant timestamp) {
+      Instant timestamp) throws Exception {
     currentLoad.incrementAndGet();
     try {
       synchronized (transfersMap) {
-        try {
-          BankTransfer newTransfer = new BankTransfer(
-              transferId,
-              sourceCpf,
-              destCpf,
-              amount,
-              timestamp);
-          transfersMap.put(transferId, newTransfer);
-          transferService.saveAll(transfersMap.values());
-
-          System.out.println("[" + nodeName + "] Transferência " + transferId + " replicada e salva com sucesso.");
-        } catch (Exception e) {
-          System.err.println("[" + nodeName + "] Erro ao replicar transferência: " + e.getMessage());
+        // evita IO desnecessário se a transação já foi processada
+        if (transfersMap.containsKey(transferId)) {
+          System.out
+              .println("[" + nodeName + "] Transferência " + transferId + " já registrada (retentativa ignorada).");
+          return;
         }
+
+        BankTransfer newTransfer = new BankTransfer(
+            transferId,
+            sourceCpf,
+            destCpf,
+            amount,
+            timestamp);
+        transfersMap.put(transferId, newTransfer);
+        transferService.saveAll(transfersMap.values());
+
+        System.out.println("[" + nodeName + "] Transferência " + transferId + " replicada e salva com sucesso.");
       }
     } finally {
       currentLoad.decrementAndGet();
@@ -498,29 +497,24 @@ public class DataNode implements Receiver {
   }
 
   // ROLLBACKS -> DEU RUIIIIMMMM
-  public void replicateDeleteAccount(String accountId) {
+  public void replicateDeleteAccount(String accountId) throws Exception {
     currentLoad.incrementAndGet();
     try {
       synchronized (accountsMap) {
-        try {
-          // verifica se conta existe no nó
-          if (accountsMap.containsKey(accountId)) {
+        // verifica se conta existe no nó
+        if (accountsMap.containsKey(accountId)) {
 
-            // tira do hashmap (RAM)
-            accountsMap.remove(accountId);
+          // tira do hashmap (RAM)
+          accountsMap.remove(accountId);
 
-            // re escreve json com a deleção
-            accountService.saveAll(accountsMap.values());
+          // re escreve json com a deleção
+          accountService.saveAll(accountsMap.values());
 
-            System.out.println(
-                "[" + nodeName + "] ROLLBACK EXECUTADO: Conta " + accountId + " excluída da memória e do disco.");
-          } else {
-            System.out.println("[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a conta " + accountId
-                + " já não existia localmente.");
-          }
-        } catch (Exception e) {
-          System.err.println(
-              "[" + nodeName + "] ERRO CRÍTICO AO EXECUTAR ROLLBACK da conta " + accountId + ": " + e.getMessage());
+          System.out.println(
+              "[" + nodeName + "] ROLLBACK EXECUTADO: Conta " + accountId + " excluída da memória e do disco.");
+        } else {
+          System.out.println("[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a conta " + accountId
+              + " já não existia localmente.");
         }
       }
     } finally {
@@ -528,48 +522,43 @@ public class DataNode implements Receiver {
     }
   }
 
-  public void replicateDeleteTransfer(String transferId, String sourceCpf, String destCpf, double amount) {
+  public void replicateDeleteTransfer(String transferId, String sourceCpf, String destCpf, double amount)
+      throws Exception {
     currentLoad.incrementAndGet();
     try {
       synchronized (accountsMap) {
         synchronized (transfersMap) {
-          try {
-            // verifica se conta existe no nó
-            if (transfersMap.containsKey(transferId)) {
+          // verifica se conta existe no nó
+          if (transfersMap.containsKey(transferId)) {
 
-              // tira do hashmap (RAM)
-              transfersMap.remove(transferId);
+            // tira do hashmap (RAM)
+            transfersMap.remove(transferId);
 
-              // re escreve json com a deleção
-              transferService.saveAll(transfersMap.values());
+            // re escreve json com a deleção
+            transferService.saveAll(transfersMap.values());
 
-              // volta valor para as contas
-              BankAccount source = accountsMap.get(sourceCpf);
-              BankAccount dest = accountsMap.get(destCpf);
+            // volta valor para as contas
+            BankAccount source = accountsMap.get(sourceCpf);
+            BankAccount dest = accountsMap.get(destCpf);
 
-              if (source != null) {
-                source.setBalance(source.getBalance() + amount);
-              }
-              if (dest != null) {
-                dest.setBalance(dest.getBalance() - amount);
-              }
-
-              // salva valor nas contas
-              accountService.saveAll(accountsMap.values());
-
-              System.out.println(
-                  "[" + nodeName + "] ROLLBACK EXECUTADO: transferencia " + transferId
-                      + " excluída da memória e do disco.");
-            } else {
-              System.out
-                  .println(
-                      "[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a transferencia " + transferId
-                          + " já não existia localmente.");
+            if (source != null) {
+              source.setBalance(source.getBalance() + amount);
             }
-          } catch (Exception e) {
-            System.err.println(
-                "[" + nodeName + "] ERRO CRÍTICO AO EXECUTAR ROLLBACK da transferencia " + transferId + ": "
-                    + e.getMessage());
+            if (dest != null) {
+              dest.setBalance(dest.getBalance() - amount);
+            }
+
+            // salva valor nas contas
+            accountService.saveAll(accountsMap.values());
+
+            System.out.println(
+                "[" + nodeName + "] ROLLBACK EXECUTADO: transferencia " + transferId
+                    + " excluída da memória e do disco.");
+          } else {
+            System.out
+                .println(
+                    "[" + nodeName + "] AVISO ROLLBACK: Ordem de apagar recebida, mas a transferencia " + transferId
+                        + " já não existia localmente.");
           }
         }
       }
