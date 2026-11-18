@@ -734,6 +734,18 @@ public class DataNode implements Receiver {
 
       boolean isSuccess = false;
 
+      // Se veio senha, é criação de conta nova: bloqueia se o CPF já existir
+      if (password != null && !password.isEmpty()) {
+        synchronized (accountsMap) {
+          if (accountsMap.containsKey(accountId)) {
+            System.out.println("[" + nodeName + "] Criação recusada: CPF " + accountId + " já cadastrado.");
+            responseObserver.onNext(SaveAccountDataResponse.newBuilder().setSuccess(false).build());
+            responseObserver.onCompleted();
+            return;
+          }
+        }
+      }
+
       RequestOptions syncOptions = MyRpcOptions.getMajority(channel).setTimeout(Constants.timeOut);
 
       try {
