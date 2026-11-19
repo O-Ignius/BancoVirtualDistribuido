@@ -100,7 +100,7 @@ public class ControlNode implements Receiver {
             .start();
 
         // após build do servidor grpc, começa a anúnciá-lo
-        broadcaster.start("DATA", grpcPort);
+        broadcaster.start("CONTROL", grpcPort);
 
         System.out.println("[" + nodeName + "] COORDENADOR DE CONTROLE: Escutando Gateway na porta " + grpcPort);
       } catch (Exception e) {
