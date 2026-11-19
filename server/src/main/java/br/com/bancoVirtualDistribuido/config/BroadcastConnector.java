@@ -7,6 +7,11 @@ import java.nio.charset.StandardCharsets;
 
 public class BroadcastConnector {
 
+  // força ipv4
+  static {
+    System.setProperty("java.net.preferIPv4Stack", "true");
+  }
+
   private volatile boolean running = false;
   private Thread broadcasterThread;
 

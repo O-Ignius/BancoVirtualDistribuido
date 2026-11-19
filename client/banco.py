@@ -8,6 +8,8 @@ A escolha é feita pela variável de ambiente BANCO_MODO, para rodar mockado './
 """
 
 import os
+import socket
+import struct
 import threading
 import uuid
 from datetime import datetime
@@ -128,12 +130,50 @@ class BancoMock:
 # ----------------------------------------------------------------------
 
 
+def descobrir_coordenador(
+    tipo="GATEWAY", grupo="229.0.0.1", porta_udp=4446, timeout=10
+):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if hasattr(socket, "SO_REUSEPORT"):
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+
+    sock.bind(("0.0.0.0", porta_udp))
+    sock.settimeout(timeout)
+
+    interfaces = ["0.0.0.0", "127.0.0.1"]
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            interfaces.append(s.getsockname()[0])
+    except OSError:
+        pass
+
+    for iface in set(interfaces):
+        try:
+            mreq = socket.inet_aton(grupo) + socket.inet_aton(iface)
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        except OSError:
+            pass
+
+    try:
+        while True:
+            dados, addr = sock.recvfrom(256)
+            partes = dados.decode("utf-8").split(";")
+            if len(partes) == 3 and partes[0] == tipo:
+                return addr[0], int(partes[2])
+    except socket.timeout as e:
+        raise BancoIndisponivel(f"Tempo esgotado buscando {tipo} via multicast.") from e
+    finally:
+        sock.close()
+
+
 class BancoGrpc:
     """
     Comunicação com o Gateway através do serviço BankService.
     """
 
-    def __init__(self, host, porta):
+    def __init__(self, host=None, porta=None):
         import grpc
 
         try:
@@ -147,21 +187,42 @@ class BancoGrpc:
 
         self._grpc = grpc
         self._pb = pb
-        self._canal = grpc.insecure_channel(f"{host}:{porta}")
-        self._stub = pb_grpc.BankServiceStub(self._canal)
+        self._pb_grpc = pb_grpc
         self._timeout = 5
+        self._canal = None
+        self._stub = None
 
-    def _chamar(self, metodo, requisicao):
-        try:
-            return metodo(requisicao, timeout=self._timeout)
-        except self._grpc.RpcError as e:
-            if e.code() == self._grpc.StatusCode.UNIMPLEMENTED:
-                raise OperacaoNaoSuportada(str(e.details())) from e
-            raise BancoIndisponivel(str(e.details() or e.code())) from e
+        if host and porta:
+            self._conectar(host, porta)
+        else:
+            self._redescobrir()
+
+    def _conectar(self, host, porta):
+        if self._canal is not None:
+            self._canal.close()
+        self._canal = self._grpc.insecure_channel(f"{host}:{porta}")
+        self._stub = self._pb_grpc.BankServiceStub(self._canal)
+
+    def _redescobrir(self):
+        host, porta = descobrir_coordenador("GATEWAY")
+        self._conectar(host, porta)
+
+    def _chamar(self, nome_metodo, requisicao):
+        for tentativa in range(2):
+            try:
+                metodo = getattr(self._stub, nome_metodo)
+                return metodo(requisicao, timeout=self._timeout)
+            except self._grpc.RpcError as e:
+                if e.code() == self._grpc.StatusCode.UNIMPLEMENTED:
+                    raise OperacaoNaoSuportada(str(e.details())) from e
+                if e.code() == self._grpc.StatusCode.UNAVAILABLE and tentativa == 0:
+                    self._redescobrir()
+                    continue
+                raise BancoIndisponivel(str(e.details() or e.code())) from e
 
     def criar_conta(self, nome, cpf, senha):
         resp = self._chamar(
-            self._stub.CreateAccountService,
+            "CreateAccountService",
             self._pb.CreateAccountServiceRequest(user=nome, password=senha, cpf=cpf),
         )
         if not resp.success:
@@ -172,26 +233,26 @@ class BancoGrpc:
 
     def login(self, cpf, senha):
         resp = self._chamar(
-            self._stub.LoginService,
+            "LoginService",
             self._pb.LoginServiceRequest(id=cpf, password=senha),
         )
         return resp.success
 
     def nome_da_conta(self, cpf):
         return self._chamar(
-            self._stub.GetAccountService,
+            "GetAccountService",
             self._pb.GetAccountServiceRequest(cpf=cpf),
         ).owner
 
     def consultar_saldo(self, cpf):
         return self._chamar(
-            self._stub.GetAccountService,
+            "GetAccountService",
             self._pb.GetAccountServiceRequest(cpf=cpf),
         ).balance_cents
 
     def transferir(self, origem, destino, valor_centavos):
         resp = self._chamar(
-            self._stub.SaveTransferService,
+            "SaveTransferService",
             self._pb.SaveTransferServiceRequest(
                 source_cpf=origem,
                 destination_cpf=destino,
@@ -204,7 +265,7 @@ class BancoGrpc:
 
     def extrato(self, cpf):
         resp = self._chamar(
-            self._stub.GetTransferService,
+            "GetTransferService",
             self._pb.GetTransferServiceRequest(source=cpf),
         )
         return [
@@ -220,14 +281,14 @@ class BancoGrpc:
 
     def buscar_por_nome(self, termo):
         resp = self._chamar(
-            self._stub.SearchAccountsByNameService,
+            "SearchAccountsByNameService",
             self._pb.SearchAccountsByNameServiceRequest(name=termo),
         )
         return [{"cpf": conta.cpf, "nome": conta.user} for conta in resp.accounts]
 
     def montante(self):
         resp = self._chamar(
-            self._stub.GetTotalBankMoneyService,
+            "GetTotalBankMoneyService",
             empty_pb2.Empty(),
         )
         return {
@@ -240,7 +301,12 @@ def criar_banco():
     modo = os.environ.get("BANCO_MODO", "grpc").lower()
     if modo == "mock":
         return BancoMock()
-    return BancoGrpc(
-        os.environ.get("GATEWAY_HOST", "localhost"),
-        int(os.environ.get("GATEWAY_PORTA", "50050")),
-    )
+
+    # Permite sobrescrever via variável de ambiente se quiser forçar um IP;
+    # caso contrário, descobre dinamicamente via Multicast.
+    host = os.environ.get("GATEWAY_HOST")
+    porta = os.environ.get("GATEWAY_PORTA")
+    if host and porta:
+        return BancoGrpc(host, int(porta))
+
+    return BancoGrpc()
