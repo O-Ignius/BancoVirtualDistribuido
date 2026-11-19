@@ -163,10 +163,32 @@ public class ControlNode implements Receiver {
     }
   }
 
+  // tratamento de dados recebidos
+  public boolean verifyValidityCpf(String cpf) {
+    if (cpf.matches("\\d{11}")) {
+      return true;
+    }
+    return false;
+  }
+
+  public boolean verifyValidityAmount(double amount) {
+    return Double.isFinite(amount) && amount > 0.0;
+  }
+
+  public boolean verifyValidityPassword(String password) {
+    return password != null && !password.isBlank();
+  }
+
   // ---------- RPC ------------
 
   public boolean loginService(String idCliente, String password) {
     currentLoad.incrementAndGet();
+    // verificadores
+    if (!verifyValidityCpf(idCliente) || !verifyValidityPassword(password)) {
+      currentLoad.decrementAndGet();
+      return false;
+    }
+
     try {
       if (!dataClient.verifyCredentialsData(idCliente, password)) {
         return false;
@@ -189,6 +211,13 @@ public class ControlNode implements Receiver {
 
   public boolean createAccount(String cpf, String user, String password) {
     currentLoad.incrementAndGet();
+
+    // verificadores
+    if (!verifyValidityCpf(cpf) || !verifyValidityPassword(password)) {
+      currentLoad.decrementAndGet();
+      return false;
+    }
+
     try {
       return dataClient.saveAccountData(cpf, user, password, Constants.inititalBalance);
     } finally {
@@ -198,6 +227,13 @@ public class ControlNode implements Receiver {
 
   public boolean processTransfer(String idSource, String idDestiny, double amount) {
     currentLoad.incrementAndGet();
+
+    // verificadores
+    if (!verifyValidityCpf(idSource) || !verifyValidityCpf(idDestiny) || !verifyValidityAmount(amount)) {
+      currentLoad.decrementAndGet();
+      return false;
+    }
+
     String lock1 = idSource.compareTo(idDestiny) < 0 ? idSource : idDestiny;
     String lock2 = idSource.compareTo(idDestiny) < 0 ? idDestiny : idSource;
 
@@ -256,6 +292,12 @@ public class ControlNode implements Receiver {
 
   public ReadAccountDataResponse fetchAccountFromData(String cpf) {
     currentLoad.incrementAndGet();
+
+    // verificadores
+    if (!verifyValidityCpf(cpf)) {
+      currentLoad.decrementAndGet();
+      return ReadAccountDataResponse.newBuilder().setFound(false).build();
+    }
     try {
       return dataClient.readAccountData(cpf);
     } finally {
@@ -265,6 +307,12 @@ public class ControlNode implements Receiver {
 
   public GetTransferDataResponse fetchTransfersFromData(String cpf) {
     currentLoad.incrementAndGet();
+
+    // verificadores
+    if (!verifyValidityCpf(cpf)) {
+      currentLoad.decrementAndGet();
+      return GetTransferDataResponse.newBuilder().build();
+    }
     try {
       return dataClient.readTransferData(cpf);
     } finally {
