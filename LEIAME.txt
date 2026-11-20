@@ -1,0 +1,131 @@
+============================================================
+1. REQUISITOS
+============================================================
+
+Para compilar e executar os programas, é necessário possuir:
+
+- Sistema operacional compatível com POSIX (GNU/Linux ou macOS).
+- Python 3 instalado (caso execute o frontend).
+- Java JDK instalado (caso execute os componentes Java).
+- Apache Maven instalado e configurado no PATH.
+- Bash ou shell compatível (para executar os scripts automatizados).
+- Permissão de execução nos arquivos .sh.
+
+As dependências Python são instaladas automaticamente pelos scripts de execução, utilizando o arquivo requirements.txt e o ambiente virtual (venv) criado pelo próprio projeto.
+
+As dependências e os plugins dos projetos Java são gerenciados pelo Maven, por meio dos arquivos pom.xml.
+
+============================================================
+2. ESTRUTURA DOS SCRIPTS
+============================================================
+
+Os scripts .sh disponibilizados automatizam a compilação e/ou execução dos componentes do projeto.
+
+Cada script possui uma finalidade específica, conforme descrito abaixo:
+
+- executarFrontEnd.sh: executa a interface web do banco virtual.
+- executarControlNodes.sh: executa os nós de controle.
+- executarDataNodes.sh: executa os nós de dados.
+- executarGateway.sh: executa o Gateway.
+- executaTudoLocal.sh: automatiza a inicialização dos componentes do sistema em ambiente local para testes, incluindo os nós de dados, os nós de controle e o Gateway.
+
+============================================================
+3. PERMISSÕES DE EXECUÇÃO
+============================================================
+
+Antes da primeira execução, conceda permissão de execução aos scripts:
+
+chmod +x client/*.sh && chmod +x server/*.sh
+
+============================================================
+4. COMPILAÇÃO
+============================================================
+
+A compilação dos componentes é realizada pelos próprios scripts de execução.
+
+Para solicitar a compilação, basta utilizar o parâmetro "compile" ao executar o script desejado.
+
+Exemplos:
+
+./executarControlNodes.sh compile
+./executarDataNodes.sh compile
+./executarGateway.sh compile
+./executarFrontEnd.sh compile
+
+A compilação é realizada conforme as configurações de cada componente.
+
+============================================================
+5. EXECUÇÃO
+============================================================
+
+Os componentes podem ser executados individualmente ou em conjunto, conforme a necessidade.
+
+5.1. EXECUÇÃO DOS COMPONENTES INDIVIDUALMENTE
+
+Para executar os nós de controle:
+
+./executarControlNodes.sh
+
+Para executar os nós de dados:
+
+./executarDataNodes.sh
+
+Para executar o Gateway:
+
+./executarGateway.sh
+
+Para executar o frontend:
+
+./executarFrontEnd.sh
+
+5.2. EXECUÇÃO COMPLETA EM AMBIENTE LOCAL
+
+Para iniciar os componentes do sistema em ambiente local por meio de um único script:
+
+./executaTudoLocal.sh
+
+Esse script automatiza a inicialização dos componentes necessários para a execução local do sistema.
+
+5.3. EXECUÇÃO DO FRONTEND
+
+O frontend pode ser executado em dois modos:
+
+MODO MOCK
+
+Executa a interface utilizando um banco de dados em memória, sem necessidade de conexão com o Gateway.
+
+./executarFrontEnd.sh mock
+
+MODO gRPC
+
+Executa a interface conectada ao Gateway por meio de comunicação gRPC.
+
+./executarFrontEnd.sh
+
+Nesse modo, o Gateway deve estar em execução e acessível pelo frontend.
+
+============================================================
+6. AJUDA DOS SCRIPTS
+============================================================
+
+Todos os scripts disponibilizam opções de ajuda para consultar suas funcionalidades e parâmetros de execução.
+
+Para visualizar as instruções de utilização de um script, utilize:
+
+./nomeDoScript.sh -h
+
+ou:
+
+./nomeDoScript.sh --help
+
+============================================================
+7. OBSERVAÇÕES
+============================================================
+
+- Os scripts automatizam as etapas necessárias para compilação e execução dos componentes.
+- O parâmetro "compile" solicita a compilação do componente correspondente.
+- As dependências Python são instaladas automaticamente quando necessário.
+- As dependências e os plugins Java são gerenciados pelo Maven.
+- Os componentes podem estabelecer ou encerrar suas conexões durante a execução, não sendo obrigatória uma ordem rígida de inicialização, desde que os serviços necessários estejam disponíveis quando solicitados.
+- Para a execução completa do sistema, deve haver pelo menos uma instância de cada componente necessário em funcionamento simultaneamente.
+- Os comandos devem ser executados a partir do diretório correspondente ao script, salvo indicação contrária no próprio script.
