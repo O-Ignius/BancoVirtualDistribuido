@@ -1,21 +1,57 @@
 #!/bin/bash
 
 # Uso:
-#   ./executaFront.sh          # conecta ao Gateway via gRPC (localhost:50050)
-#   ./executaFront.sh mock     # banco em memória, sem precisar do back-end
-#
-# Variáveis opcionais: GATEWAY_HOST, GATEWAY_PORTA, FRONT_HOST, FRONT_PORTA
+#   ./executaFront.sh              # Executa via gRPC
+#   ./executaFront.sh mock         # Executa em modo mock
+#   ./executaFront.sh compile      # Compila os stubs RPC e executa via gRPC
+#   ./executaFront.sh compile mock # Compila os stubs RPC e executa em modo mock
 
 cd "$(dirname "$0")" || exit 1
 
-if [[ "$1" == "mock" ]]; then
-  export BANCO_MODO=mock
+# Carrega o .env da pasta anterior
+ENV_FILE="../.envsafe"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  source "$ENV_FILE"
+  set +a
+else
+  echo "Erro: arquivo .env não encontrado em $ENV_FILE"
+  exit 1
 fi
 
+# Seleciona o Python
 PYTHON=python3
 if [[ -x .venv/bin/python ]]; then
   PYTHON=.venv/bin/python
 fi
 
-echo "Interface em http://${FRONT_HOST:-127.0.0.1}:${FRONT_PORTA:-5000} (modo: ${BANCO_MODO:-grpc})"
+# Compila os stubs gRPC se solicitado
+if [[ "$1" == "compile" ]]; then
+  echo "Compilando stubs gRPC..."
+
+  "$PYTHON" -m grpc_tools.protoc \
+    -I../proto \
+    --python_out=. \
+    --grpc_python_out=. \
+    ../proto/bank_service.proto
+
+  if [[ $? -ne 0 ]]; then
+    echo "Erro ao compilar os stubs gRPC."
+    exit 1
+  fi
+
+  shift
+  echo "Compilação concluída!"
+fi
+
+# Define o modo de execução
+if [[ "$1" == "mock" ]]; then
+  export BANCO_MODO=mock
+else
+  export BANCO_MODO=grpc
+fi
+
+echo "Interface em http://${FRONT_HOST:-127.0.0.1}:${FRONT_PORTA:-5000} (modo: ${BANCO_MODO})"
+
 exec "$PYTHON" app.py

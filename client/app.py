@@ -223,6 +223,6 @@ def api_montante():
 if __name__ == "__main__":
     app.run(
         host=os.environ.get("FRONT_HOST", "127.0.0.1"),
-        port=int(os.environ.get("FRONT_PORTA", "5000")),
+        port=int(os.environ.get("FRONT_PORT", "5000")),
         debug=os.environ.get("FRONT_DEBUG") == "1",
     )
