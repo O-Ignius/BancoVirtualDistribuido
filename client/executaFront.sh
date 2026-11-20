@@ -1,10 +1,27 @@
 #!/bin/bash
 
-# Uso:
-#   ./executaFront.sh              # Executa via gRPC
-#   ./executaFront.sh mock         # Executa em modo mock
-#   ./executaFront.sh compile      # Compila os stubs RPC e executa via gRPC
-#   ./executaFront.sh compile mock # Compila os stubs RPC e executa em modo mock
+mostrar_ajuda() {
+  cat <<EOF
+Uso:
+  $(basename "$0") [compile] [mock]
+
+Parâmetros:
+  compile       Compila os stubs gRPC a partir de ../proto/bank_service.proto antes de iniciar (opcional)
+  mock          Executa o front-end em modo mock sem conectar ao Gateway gRPC (opcional, padrão: grpc)
+  -h, --help    Exibe esta mensagem de ajuda
+
+Exemplos:
+  $(basename "$0")               # Executa via gRPC
+  $(basename "$0") mock          # Executa em modo mock
+  $(basename "$0") compile       # Compila os stubs RPC e executa via gRPC
+  $(basename "$0") compile mock  # Compila os stubs RPC e executa em modo mock
+EOF
+}
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  mostrar_ajuda
+  exit 0
+fi
 
 cd "$(dirname "$0")" || exit 1
 
