@@ -15,7 +15,7 @@ public class ServiceDiscovery {
   public static String[] discover(String targetService) throws Exception {
     try (MulticastSocket socket = new MulticastSocket(Constants.DISCOVERY_MULTICAST_PORT)) {
       socket.setOption(StandardSocketOptions.SO_REUSEADDR, true);
-      socket.setSoTimeout(10000);
+      socket.setSoTimeout(Constants.timeOut);
 
       InetAddress group = InetAddress.getByName(Constants.DISCOVERY_MULTICAST_GROUP);
       InetSocketAddress groupAddr = new InetSocketAddress(group, Constants.DISCOVERY_MULTICAST_PORT);

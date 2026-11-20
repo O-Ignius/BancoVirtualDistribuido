@@ -1,46 +1,60 @@
+
 package br.com.bancoVirtualDistribuido.config;
 
 import org.jgroups.JChannel;
 
 public final class Constants {
+
   private Constants() {
   }
 
-  public static final int timeOut = 10000; // ms
-  public static final int timeOutRetries = 8000; // ms
-  public static final int timeOutRollBack = 3000; // ms
-  public static final String dataChannelName = "DataChannel";
-  public static final String controlChannelName = "ControlChannel";
-  public static final String accountsDatabaseFolder = "database/";
-  public static final String transfersDatabaseFolder = "database/";
-  public static final double inititalBalance = 1000;
+  // Métodos auxiliares para leitura de variáveis de ambiente
+  private static String getEnv(String key, String defaultValue) {
+    return System.getenv().getOrDefault(key, defaultValue);
+  }
 
-  // retries
-  public static final int maxRetriesSaveAccount = 3;
-  public static final int maxRetriesSaveTransfer = 3;
+  private static int getEnvInt(String key, int defaultValue) {
+    return Integer.parseInt(getEnv(key, String.valueOf(defaultValue)));
+  }
 
-  // portas grpc
-  public static final int GATEWAY_PORT = 50050;
-  public static final int CONTROL_NODE_PORT = 50051;
-  public static final int DATA_NODE_PORT = 50052;
+  private static double getEnvDouble(String key, double defaultValue) {
+    return Double.parseDouble(getEnv(key, String.valueOf(defaultValue)));
+  }
 
-  // ips fixos
-  public static final String dataServerIp = "localhost";
-  public static final String controlServerIp = "localhost";
+  // Timeouts
+  public static final int timeOut = getEnvInt("TIME_OUT", 10000);
+  public static final int timeOutRetries = getEnvInt("TIME_OUT_RETRIES", 8000);
+  public static final int timeOutRollBack = getEnvInt("TIME_OUT_ROLLBACK", 3000);
 
-  // ips de broadcast para descoberta de gateway e coordenadores
-  public static final String DISCOVERY_MULTICAST_GROUP = "229.0.0.1";
-  public static final int DISCOVERY_MULTICAST_PORT = 4446;
-  public static final int sleepMulticastDiscover = 2000;// ms
+  // Canais
+  public static final String dataChannelName = getEnv("DATA_CHANNEL_NAME", "DataChannel");
+  public static final String controlChannelName = getEnv("CONTROL_CHANNEL_NAME", "ControlChannel");
 
-  // configs para minimo de servidores e tempo de espera para esses minimos
-  public static final int minDataNodesCluster = 1;
-  public static final int timeOutWaitClusters = 3000; // ms
+  // Banco de dados
+  public static final String accountsDatabaseFolder = getEnv("ACCOUNTS_DATABASE_FOLDER", "database/");
+  public static final String transfersDatabaseFolder = getEnv("TRANSFERS_DATABASE_FOLDER", "database/");
+  public static final double inititalBalance = getEnvDouble("INITIAL_BALANCE", 1000);
 
-  // função para constante jGroups
+  // Retries
+  public static final int maxRetriesSaveAccount = getEnvInt("MAX_RETRIES_SAVE_ACCOUNT", 3);
+  public static final int maxRetriesSaveTransfer = getEnvInt("MAX_RETRIES_SAVE_TRANSFER", 3);
+
+  // Portas gRPC
+  public static final int GATEWAY_PORT = getEnvInt("GATEWAY_PORT", 50050);
+  public static final int CONTROL_NODE_PORT = getEnvInt("CONTROL_NODE_PORT", 50051);
+  public static final int DATA_NODE_PORT = getEnvInt("DATA_NODE_PORT", 50052);
+
+  // Multicast
+  public static final String DISCOVERY_MULTICAST_GROUP = getEnv("DISCOVERY_MULTICAST_GROUP", "229.0.0.1");
+  public static final int DISCOVERY_MULTICAST_PORT = getEnvInt("DISCOVERY_MULTICAST_PORT", 4446);
+  public static final int sleepMulticastDiscover = getEnvInt("SLEEP_MULTICAST_DISCOVER", 2000);
+
+  // Cluster
+  public static final int minDataNodesCluster = getEnvInt("MIN_DATA_NODES_CLUSTER", 1);
+  public static final int timeOutWaitClusters = getEnvInt("TIME_OUT_WAIT_CLUSTERS", 3000);
+
+  // Maioria JGroups
   public static int getMajority(JChannel channel) {
-    // Segurança: Se o canal não estiver conectado ou não tiver visão ainda, a
-    // maioria é 1 (ele mesmo)
     if (channel == null || channel.getView() == null) {
       return 1;
     }
