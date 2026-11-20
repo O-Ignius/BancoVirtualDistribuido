@@ -50,7 +50,7 @@ public final class Constants {
   public static final int sleepMulticastDiscover = getEnvInt("SLEEP_MULTICAST_DISCOVER", 2000);
 
   // Cluster
-  public static final int minDataNodesCluster = getEnvInt("MIN_DATA_NODES_CLUSTER", 1);
+  public static final int minDataNodesCluster = getEnvInt("MIN_DATA_NODES_CLUSTER", 3);
   public static final int timeOutWaitClusters = getEnvInt("TIME_OUT_WAIT_CLUSTERS", 3000);
 
   // Maioria JGroups
