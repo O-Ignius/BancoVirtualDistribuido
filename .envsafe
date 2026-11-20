@@ -1,3 +1,24 @@
+# ==================================================
+# CONFIGURAÇÕES COMPARTILHADAS (JAVA + PYTHON)
+# ==================================================
+
+# Gateway gRPC
+GATEWAY_PORT=50050
+
+# Endereço dos servidores
+# GATEWAY_HOST=localhost
+# DATA_SERVER_IP=localhost
+# CONTROL_SERVER_IP=localhost
+
+# Descoberta multicast
+DISCOVERY_MULTICAST_GROUP=229.0.0.1
+DISCOVERY_MULTICAST_PORT=4446
+
+
+# ==================================================
+# CONFIGURAÇÕES EXCLUSIVAS DO JAVA
+# ==================================================
+
 # Timeouts (ms)
 TIME_OUT=10000
 TIME_OUT_RETRIES=8000
@@ -16,17 +37,35 @@ INITIAL_BALANCE=1000
 MAX_RETRIES_SAVE_ACCOUNT=3
 MAX_RETRIES_SAVE_TRANSFER=3
 
-# Portas gRPC
-GATEWAY_PORT=50050
+# Portas dos nós
 CONTROL_NODE_PORT=50051
 DATA_NODE_PORT=50052
 
-# Descoberta multicast
-DISCOVERY_MULTICAST_GROUP=229.0.0.1
-DISCOVERY_MULTICAST_PORT=4446
+# Descoberta multicast (ms)
 SLEEP_MULTICAST_DISCOVER=2000
 
-# Configurações do cluster
+# Cluster
 MIN_DATA_NODES_CLUSTER=1
 TIME_OUT_WAIT_CLUSTERS=3000
 
+
+# ==================================================
+# CONFIGURAÇÕES EXCLUSIVAS DO PYTHON
+# ==================================================
+
+# Modo de execução: grpc ou mock
+BANCO_MODO=grpc
+
+# Timeout de descoberta (segundos)
+DISCOVERY_TIMEOUT=10
+
+# Timeout das chamadas gRPC (segundos)
+GRPC_TIMEOUT=5
+
+# Frontend Flask
+FRONT_HOST=127.0.0.1
+FRONT_PORT=5000
+FRONT_DEBUG=0
+
+# Deixe vazio para gerar uma chave aleatória
+FRONT_SEGREDO=
