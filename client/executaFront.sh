@@ -43,6 +43,16 @@ if [[ -x .venv/bin/python ]]; then
   PYTHON=.venv/bin/python
 fi
 
+echo "Verificando e instalando dependências..."
+python -m pip install -r requirements.txt
+
+if [ $? -ne 0 ]; then
+  echo "Erro ao instalar as dependências."
+  exit 1
+fi
+
+echo "Dependências verificadas com sucesso!"
+
 # Compila os stubs gRPC se solicitado
 if [[ "$1" == "compile" ]]; then
   echo "Compilando stubs gRPC..."
