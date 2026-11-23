@@ -11,9 +11,12 @@
 
     <properties>
 
-        <!-- Versão mínima de compatibilidade do código Java.
+    <!-- Versão mínima de compatibilidade do código Java.
              Garante que o projeto seja compilado seguindo as APIs do Java 17. -->
-        <maven.compiler.release>17</maven.compiler.release>
+        <java.version>17</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
 
         <!-- Codificação dos arquivos do projeto. -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -92,7 +95,17 @@
         </extensions>
 
         <plugins>
-
+            <!-- Força o Maven a usar versão moderna do compilador e respeitar a versão do Java -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <release>${java.version}</release>
+                </configuration>
+            </plugin>
             <!-- Plugin responsável por gerar as classes Java
                  a partir dos arquivos .proto. -->
             <plugin>
