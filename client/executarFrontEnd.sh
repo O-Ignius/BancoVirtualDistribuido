@@ -37,19 +37,22 @@ else
   exit 1
 fi
 
-# Seleciona o Python
-PYTHON=python3
-if [[ -x .venv/bin/python ]]; then
-  PYTHON=.venv/bin/python
+# Cria o ambiente virtual (.venv) automaticamente caso não exista
+if [[ ! -x .venv/bin/python ]]; then
+  echo "Ambiente virtual (.venv) não encontrado. Criando..."
+  python3 -m venv .venv || {
+    echo "Erro ao criar .venv. Verifique se o pacote python3-venv está instalado."
+    exit 1
+  }
 fi
+
+PYTHON=".venv/bin/python"
 
 echo "Verificando e instalando dependências..."
-python -m pip install -r requirements.txt
-
-if [ $? -ne 0 ]; then
+"$PYTHON" -m pip install -r requirements.txt || {
   echo "Erro ao instalar as dependências."
   exit 1
-fi
+}
 
 echo "Dependências verificadas com sucesso!"
 
