@@ -16,24 +16,24 @@ public class FrontendConnector {
   private final BroadcastConnector broadcaster = new BroadcastConnector();
 
   // O "telefone" para ligar para o Controle
-  private BankServiceGrpc.BankServiceBlockingStub controlStub;
+  private volatile BankServiceGrpc.BankServiceBlockingStub controlStub;
 
   public void start() throws Exception {
     connectToControl();
 
     gatewayServer = ServerBuilder.forPort(Constants.GATEWAY_PORT)
-        .addService(new RequestProcessor(controlStub))
+        .addService(new RequestProcessor(this))
         .build()
         .start();
 
-    // após build do servidor grpc, começa a anúnciá-lo
+    // após build do servidor grpc, começa a anunciá-lo
     broadcaster.start("GATEWAY", Constants.GATEWAY_PORT);
 
     System.out.println("[Gateway] Online! Aguardando cliente Python na porta " + Constants.GATEWAY_PORT);
   }
 
   public void stop() {
-    // para anuncio do multicast de gRPC
+    // para anúncio do multicast de gRPC
     broadcaster.stop();
     if (gatewayServer != null) {
       gatewayServer.shutdown();
@@ -44,22 +44,40 @@ public class FrontendConnector {
     System.out.println("[Gateway] Conexões encerradas.");
   }
 
-  public synchronized void connectToControl() throws Exception {
+  public synchronized void connectToControl() throws InterruptedException {
     if (controlNodeChannel != null && !controlNodeChannel.isShutdown()) {
       controlNodeChannel.shutdownNow();
     }
 
-    System.out.println("[Gateway] Buscando ControlNode coordenador via Multicast...");
-    String[] endpoint = ServiceDiscovery.discover("CONTROL");
-    String host = endpoint[0];
-    int port = Integer.parseInt(endpoint[1]);
+    int tries = 1;
+    while (!Thread.currentThread().isInterrupted()) {
+      try {
+        System.out.println("[Gateway] Buscando ControlNode coordenador via Multicast (tentativa " + tries + ")...");
+        String[] endpoint = ServiceDiscovery.discover("CONTROL");
+        String host = endpoint[0];
+        int port = Integer.parseInt(endpoint[1]);
 
-    controlNodeChannel = ManagedChannelBuilder.forAddress(host, port)
-        .usePlaintext()
-        .build();
+        controlNodeChannel = ManagedChannelBuilder.forAddress(host, port)
+            .usePlaintext()
+            .build();
 
-    controlStub = BankServiceGrpc.newBlockingStub(controlNodeChannel);
-    System.out.println("[Gateway] Canal aberto com o ControlNode em " + host + ":" + port);
+        controlStub = BankServiceGrpc.newBlockingStub(controlNodeChannel);
+        System.out.println("[Gateway] Canal aberto com o ControlNode em " + host + ":" + port);
+        return;
+
+      } catch (Exception e) {
+        System.err
+            .println("[Gateway] ControlNode não encontrado (" + e.getMessage() + "). Tentando novamente em 2s...");
+        tries++;
+        Thread.sleep(2000);
+      }
+    }
+
+    throw new InterruptedException("Busca pelo ControlNode interrompida.");
+  }
+
+  public BankServiceGrpc.BankServiceBlockingStub getControlStub() {
+    return controlStub;
   }
 
   public void blockUntilShutdown() throws InterruptedException {
