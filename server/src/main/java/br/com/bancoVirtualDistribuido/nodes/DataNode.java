@@ -4,6 +4,7 @@ import br.com.bancoVirtualDistribuido.model.*;
 import br.com.bancoVirtualDistribuido.service.*;
 import br.com.bancoVirtualDistribuido.config.Constants;
 import br.com.bancoVirtualDistribuido.config.MyRpcOptions;
+import br.com.bancoVirtualDistribuido.config.DataIdentity;
 import br.com.bancoVirtualDistribuido.config.BroadcastConnector;
 
 import org.jgroups.JChannel;
@@ -1293,7 +1294,7 @@ public class DataNode implements Receiver {
   }
 
   public static void main(String[] args) throws Exception {
-    String name = "DataNode{" + UUID.randomUUID().toString() + "}";
+    String name = DataIdentity.resolveNodeName(args, "dataNode", Constants.accountsDatabaseFolder);
     String accountsPath = null;
     String transfersPath = null;
     int nodePort = Constants.DATA_NODE_PORT;
