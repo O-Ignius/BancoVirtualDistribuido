@@ -160,16 +160,25 @@ def descobrir_coordenador(tipo="GATEWAY", grupo=None, porta_udp=None, timeout=No
         except OSError:
             pass
 
+    tentativa = 1
     try:
         while True:
-            dados, addr = sock.recvfrom(256)
-            partes = dados.decode("utf-8").split(";")
+            try:
+                dados, addr = sock.recvfrom(256)
+                partes = dados.decode("utf-8", errors="ignore").strip().split(";")
 
-            if len(partes) == 3 and partes[0] == tipo:
-                return addr[0], int(partes[2])
+                if len(partes) == 3 and partes[0] == tipo:
+                    print(f"[Front] {tipo} encontrado em {addr[0]}:{partes[2]}")
+                    return addr[0], int(partes[2])
 
-    except socket.timeout as e:
-        raise BancoIndisponivel(f"Tempo esgotado buscando {tipo} via multicast.") from e
+            except socket.timeout:
+                print(
+                    f"[Front] {tipo} ainda não respondeu via multicast "
+                    f"(tentativa {tentativa}). Continuando busca..."
+                )
+                tentativa += 1
+            except ValueError:
+                continue
 
     finally:
         sock.close()
