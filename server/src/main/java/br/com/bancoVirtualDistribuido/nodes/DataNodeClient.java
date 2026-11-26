@@ -15,10 +15,14 @@ public class DataNodeClient {
   private BankDataServiceGrpc.BankDataServiceBlockingStub stub;
 
   public DataNodeClient() throws Exception {
-    reconnect();
+    reconnect(null);
   }
 
-  public synchronized void reconnect() throws Exception {
+  public synchronized void reconnect(ManagedChannel failedChannel) throws Exception {
+    if (failedChannel != null && failedChannel != this.channel) {
+      return;
+    }
+
     if (channel != null && !channel.isShutdown()) {
       channel.shutdownNow();
     }
@@ -39,13 +43,14 @@ public class DataNodeClient {
   }
 
   private <T> T callWithFailover(java.util.function.Supplier<T> rpcCall) {
+    ManagedChannel currentChannel = this.channel;
     try {
       return rpcCall.get();
     } catch (io.grpc.StatusRuntimeException e) {
       if (e.getStatus().getCode() == io.grpc.Status.Code.UNAVAILABLE) {
         System.err.println("[DataNodeClient] DataNode indisponível. Redescobrindo novo coordenador...");
         try {
-          reconnect();
+          reconnect(currentChannel);
           return rpcCall.get();
         } catch (Exception ex) {
           throw new RuntimeException("Falha ao reconectar ao novo DataNode coordenador", ex);
@@ -153,76 +158,5 @@ public class DataNodeClient {
     SaveTransferDataResponse response = callWithFailover(() -> stub.saveTransferData(request));
 
     return response.getSuccess();
-  }
-
-  // ---------- Execução de débito e crédito ----------
-
-  public boolean executeDebitAndCreditData(
-      String idSource,
-      String idDestiny,
-      double amount) {
-
-    // Busca saldo da conta de origem
-    ReadAccountDataRequest sourceRequest = ReadAccountDataRequest.newBuilder()
-        .setCpf(idSource)
-        .build();
-
-    ReadAccountDataResponse sourceResponse = callWithFailover(() -> stub.readAccountData(sourceRequest));
-
-    // Busca saldo da conta de destino
-    ReadAccountDataRequest destinyRequest = ReadAccountDataRequest.newBuilder()
-        .setCpf(idDestiny)
-        .build();
-
-    ReadAccountDataResponse destinyResponse = callWithFailover(() -> stub.readAccountData(destinyRequest));
-
-    if (!sourceResponse.getFound() || !destinyResponse.getFound()) {
-      return false;
-    }
-
-    long amountCents = (long) (amount * 100);
-
-    // Verifica saldo disponível
-    if (sourceResponse.getBalanceCents() < amountCents) {
-      return false;
-    }
-
-    // Atualiza conta de origem
-    SaveAccountDataRequest saveSource = SaveAccountDataRequest.newBuilder()
-        .setCpf(sourceResponse.getCpf())
-        .setOwner(sourceResponse.getOwner())
-        .setBalanceCents(
-            sourceResponse.getBalanceCents() - amountCents)
-        .build();
-
-    boolean sourceSuccess = callWithFailover(() -> stub.saveAccountData(saveSource).getSuccess());
-
-    if (!sourceSuccess) {
-      return false;
-    }
-
-    // Atualiza conta de destino
-    SaveAccountDataRequest saveDestiny = SaveAccountDataRequest.newBuilder()
-        .setCpf(destinyResponse.getCpf())
-        .setOwner(destinyResponse.getOwner())
-        .setBalanceCents(
-            destinyResponse.getBalanceCents() + amountCents)
-        .build();
-
-    boolean destinySuccess = callWithFailover(() -> stub.saveAccountData(saveDestiny)).getSuccess();
-
-    // se falhar o destino, estorna o valor
-    if (!destinySuccess) {
-      SaveAccountDataRequest estorno = SaveAccountDataRequest.newBuilder()
-          .setCpf(sourceResponse.getCpf())
-          .setOwner(sourceResponse.getOwner())
-          .setBalanceCents(sourceResponse.getBalanceCents()) // saldo original antes do débito
-          .build();
-
-      callWithFailover(() -> stub.saveAccountData(estorno));
-      return false;
-    }
-
-    return destinySuccess;
   }
 }

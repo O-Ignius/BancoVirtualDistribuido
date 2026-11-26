@@ -229,7 +229,8 @@ public class ControlNode implements Receiver {
     currentLoad.incrementAndGet();
 
     // verificadores
-    if (!verifyValidityCpf(idSource) || !verifyValidityCpf(idDestiny) || !verifyValidityAmount(amount)) {
+    if (!verifyValidityCpf(idSource) || !verifyValidityCpf(idDestiny) || !verifyValidityAmount(amount)
+        || idSource.equals(idDestiny)) {
       currentLoad.decrementAndGet();
       return false;
     }
@@ -247,19 +248,10 @@ public class ControlNode implements Receiver {
       System.out.printf("[%s] Locks adquiridos. Processando R$%.2f de %s para %s%n",
           nodeName, amount, idSource, idDestiny);
 
+      String transferId = UUID.randomUUID().toString();
+
       // Comunicação com o DataNode
-      boolean success = dataClient.executeDebitAndCreditData(
-          idSource, idDestiny, amount);
-
-      if (success) {
-        // Salva transferência no DataNode
-        String transferId = UUID.randomUUID().toString();
-
-        dataClient.saveTransferData(
-            transferId, idSource, idDestiny, amount);
-      }
-
-      return success;
+      return dataClient.saveTransferData(transferId, idSource, idDestiny, amount);
 
     } catch (Exception e) {
       e.printStackTrace();

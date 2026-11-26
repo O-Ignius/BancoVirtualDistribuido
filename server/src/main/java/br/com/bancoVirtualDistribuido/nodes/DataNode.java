@@ -476,28 +476,58 @@ public class DataNode implements Receiver {
     }
   }
 
-  public void replicateSaveTransfer(String transferId, String sourceCpf, String destCpf, double amount,
+  public boolean replicateSaveTransfer(
+      String transferId,
+      String sourceCpf,
+      String destCpf,
+      double amount,
       Instant timestamp) throws Exception {
+
     currentLoad.incrementAndGet();
     try {
-      synchronized (transfersMap) {
-        // evita IO desnecessário se a transação já foi processada
-        if (transfersMap.containsKey(transferId)) {
-          System.out
-              .println("[" + nodeName + "] Transferência " + transferId + " já registrada (retentativa ignorada).");
-          return;
+      synchronized (accountsMap) {
+        synchronized (transfersMap) {
+          // Idempotência: se for retentativa de um nó que já aplicou, retorna sucesso
+          if (transfersMap.containsKey(transferId)) {
+            System.out.println(
+                "[" + nodeName + "] Transferência " + transferId + " já registrada (retentativa ignorada).");
+            return true;
+          }
+
+          if (amount <= 0 || sourceCpf == null || destCpf == null || sourceCpf.equals(destCpf)) {
+            return false;
+          }
+
+          BankAccount source = accountsMap.get(sourceCpf);
+          BankAccount dest = accountsMap.get(destCpf);
+
+          if (source == null || dest == null || source.getIsDeleted() || dest.getIsDeleted()) {
+            return false;
+          }
+
+          if (source.getBalance() < amount) {
+            return false;
+          }
+
+          // Debita origem, credita destino e registra a transferência atomicamente
+          source.setBalance(source.getBalance() - amount);
+          dest.setBalance(dest.getBalance() + amount);
+
+          BankTransfer newTransfer = new BankTransfer(
+              transferId,
+              sourceCpf,
+              destCpf,
+              amount,
+              timestamp);
+          transfersMap.put(transferId, newTransfer);
+
+          // Uma única escrita em disco por arquivo
+          accountService.saveAll(accountsMap.values());
+          transferService.saveAll(transfersMap.values());
+
+          System.out.println("[" + nodeName + "] Transferência " + transferId + " replicada e salva com sucesso.");
+          return true;
         }
-
-        BankTransfer newTransfer = new BankTransfer(
-            transferId,
-            sourceCpf,
-            destCpf,
-            amount,
-            timestamp);
-        transfersMap.put(transferId, newTransfer);
-        transferService.saveAll(transfersMap.values());
-
-        System.out.println("[" + nodeName + "] Transferência " + transferId + " replicada e salva com sucesso.");
       }
     } finally {
       currentLoad.decrementAndGet();
@@ -1040,34 +1070,46 @@ public class DataNode implements Receiver {
       String dest = request.getDestinationCpf();
       Instant timestamp = Instant.now();
 
-      boolean isSuccess = false;
+      // validação antes de tentar persistir
+      synchronized (accountsMap) {
+        BankAccount srcAcc = accountsMap.get(source);
+        BankAccount dstAcc = accountsMap.get(dest);
+        if (srcAcc == null || dstAcc == null || srcAcc.getIsDeleted() || dstAcc.getIsDeleted()
+            || amount <= 0 || source.equals(dest) || srcAcc.getBalance() < amount) {
+          System.out.println("[" + nodeName + "] Transferência " + transferId + " recusada na pré-validação.");
+          responseObserver.onNext(SaveTransferDataResponse.newBuilder().setSuccess(false).build());
+          responseObserver.onCompleted();
+          return;
+        }
+      }
 
+      boolean isSuccess = false;
       RequestOptions syncOptions = MyRpcOptions.getMajority(channel).setTimeout(Constants.timeOut);
 
       try {
-        // tenta com que os nós executem a replicação da transferência
         MethodCall call = new MethodCall(
             "replicateSaveTransfer",
             new Object[] { transferId, source, dest, amount, timestamp },
             new Class[] { String.class, String.class, String.class, double.class, Instant.class });
 
-        // pega as respostas dos nós
-        RspList<Object> answers = dispatcher.callRemoteMethods(null, call, syncOptions);
+        RspList<Boolean> answers = dispatcher.callRemoteMethods(null, call, syncOptions);
 
         int countSuccess = 0;
-
+        boolean businessRejected = false;
         List<Address> successNodes = new ArrayList<>();
         List<Address> errorNodes = new ArrayList<>();
 
-        // verifica resposta nó a nó
-        for (Map.Entry<Address, Rsp<Object>> entry : answers.entrySet()) {
+        for (Map.Entry<Address, Rsp<Boolean>> entry : answers.entrySet()) {
           Address nodeAddress = entry.getKey();
-          Rsp<Object> nodeResponse = entry.getValue();
+          Rsp<Boolean> nodeResponse = entry.getValue();
 
-          // se resposta não foi erro, conta sucesso e adiciona no na lista de successo
-          if (nodeResponse.wasReceived() && !nodeResponse.hasException()) {
-            countSuccess++;
-            successNodes.add(nodeAddress);
+          if (nodeResponse.wasReceived() && !nodeResponse.hasException() && nodeResponse.getValue() != null) {
+            if (nodeResponse.getValue()) {
+              countSuccess++;
+              successNodes.add(nodeAddress);
+            } else {
+              businessRejected = true;
+            }
           } else {
             errorNodes.add(nodeAddress);
           }
@@ -1077,25 +1119,25 @@ public class DataNode implements Receiver {
         int majority = (totalNodes / 2) + 1;
         int tries = 1;
 
-        // maioria deu errado
-        if (countSuccess < majority) {
-          System.out.println("Não foi possivel replicar transferência na maioria");
+        if (countSuccess >= majority) {
+          System.out.println("Transferência replicada com sucesso na primeira tentativa.");
+          isSuccess = true;
+        } else if (!businessRejected) {
+          System.out.println("Não foi possível replicar transferência na maioria");
           RequestOptions retryOptions = MyRpcOptions.getAll().setTimeout(Constants.timeOutRetries);
 
           while (tries <= Constants.maxRetriesSaveAccount && !errorNodes.isEmpty()) {
             System.out.println("Tentando replicar transferência na maioria {tentativa: " + tries + "}");
 
-            // reenvia pra quem deu erro
             answers = dispatcher.callRemoteMethods(errorNodes, call, retryOptions);
-
             List<Address> stillFailing = new ArrayList<>();
 
-            // verifica resposta nó a nó
-            for (Map.Entry<Address, Rsp<Object>> entry : answers.entrySet()) {
+            for (Map.Entry<Address, Rsp<Boolean>> entry : answers.entrySet()) {
               Address nodeAddress = entry.getKey();
-              Rsp<Object> nodeResponse = entry.getValue();
+              Rsp<Boolean> nodeResponse = entry.getValue();
 
-              if (nodeResponse.wasReceived() && !nodeResponse.hasException()) {
+              if (nodeResponse.wasReceived() && !nodeResponse.hasException()
+                  && Boolean.TRUE.equals(nodeResponse.getValue())) {
                 countSuccess++;
                 successNodes.add(nodeAddress);
               } else {
@@ -1109,33 +1151,25 @@ public class DataNode implements Receiver {
               System.out.println("Transferência replicada com sucesso após retentativas.");
               isSuccess = true;
               break;
-            } else {
-              tries++;
             }
+            tries++;
           }
         }
-        // maioria deu certo de primeira
-        else {
-          System.out.println("Transferências replicadas com sucesso na primeira tentativa.");
-          isSuccess = true;
-        }
 
-        // se no final não conseguir um sucesso, faz rollBack compensatório
-        if (!isSuccess) {
-          System.out
-              .println("Transferência não replicada após " + tries + " tentativas, fazendo rollBack de saldos...");
+        // Rollback compensatório caso não atinja maioria
+        if (!isSuccess && !successNodes.isEmpty()) {
+          System.out.println(
+              "Transferência não replicada após " + tries + " tentativas, fazendo rollBack de saldos...");
 
-          if (!successNodes.isEmpty()) {
-            MethodCall rollbackCall = new MethodCall(
-                "replicateDeleteTransfer",
-                new Object[] { transferId, source, dest, amount },
-                new Class[] { String.class, String.class, String.class, double.class });
+          MethodCall rollbackCall = new MethodCall(
+              "replicateDeleteTransfer",
+              new Object[] { transferId, source, dest, amount },
+              new Class[] { String.class, String.class, String.class, double.class });
 
-            RequestOptions rollbackOptions = MyRpcOptions.getAll().setTimeout(Constants.timeOutRollBack);
-            dispatcher.callRemoteMethods(successNodes, rollbackCall, rollbackOptions);
+          RequestOptions rollbackOptions = MyRpcOptions.getAll().setTimeout(Constants.timeOutRollBack);
+          dispatcher.callRemoteMethods(successNodes, rollbackCall, rollbackOptions);
 
-            System.out.println("[DataNode] Rollback de transferência enviado para " + successNodes.size() + " nós.");
-          }
+          System.out.println("[DataNode] Rollback de transferência enviado para " + successNodes.size() + " nós.");
         }
 
       } catch (Exception e) {
@@ -1298,12 +1332,6 @@ public class DataNode implements Receiver {
     String accountsPath = null;
     String transfersPath = null;
     int nodePort = Constants.DATA_NODE_PORT;
-
-    // Passa nome do nó e caminhos dos arquivos de persistência
-    //
-    if (args.length > 0) {
-      name = args[0];
-    }
 
     accountsPath = Constants.accountsDatabaseFolder + "accounts-" + name + ".json";
     transfersPath = Constants.transfersDatabaseFolder + "transfers-" + name + ".json";
