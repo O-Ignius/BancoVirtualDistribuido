@@ -53,7 +53,7 @@ public class TransferStorage {
   }
 
   public JsonNode readAll() {
-    return data.get("accounts");
+    return data.get("transfers");
   }
 
   // todos envios por cpf
