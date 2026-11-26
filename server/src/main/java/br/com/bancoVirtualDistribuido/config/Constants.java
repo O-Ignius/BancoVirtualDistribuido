@@ -1,11 +1,23 @@
-
 package br.com.bancoVirtualDistribuido.config;
 
 import org.jgroups.JChannel;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 public final class Constants {
 
   private Constants() {
+  }
+
+  // CALA A BOCA JGROUPS
+  // Mantém referência forte para o GC não resetar o nível de log do JGroups
+  private static final Logger JGROUPS_UDP_LOGGER = Logger.getLogger("org.jgroups.protocols.UDP");
+  private static final Logger JGROUPS_TP_LOGGER = Logger.getLogger("org.jgroups.protocols.TP");
+
+  static {
+    JGROUPS_UDP_LOGGER.setLevel(Level.SEVERE);
+    JGROUPS_TP_LOGGER.setLevel(Level.SEVERE);
   }
 
   // Métodos auxiliares para leitura de variáveis de ambiente
